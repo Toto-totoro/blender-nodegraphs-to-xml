@@ -177,7 +177,7 @@ def convert_nodegroup_node_to_xml(node, parent_element, graph_id):
                     'texture_mapping',
                     'color_mapping',
             
-                    'node_tree'
+                    'node_tree',
                     'outputs'
                     }
     convert_node_properties_to_xml(node, wrapperIN_node_element, filter_for_input_node)
@@ -225,6 +225,8 @@ def convert_node_properties_to_xml(node, node_element, filter_unnecessary=None):
 
             else:
                 print(f"Unsupported property type for {prop_name} in node {node.name}: {type(prop)}")
+
+        return property_map
                 
 
 
@@ -234,7 +236,7 @@ def convert_mathutils_vector_to_xml(item, item_name, parent_element, property_ma
     try:
         item_element = ET.SubElement(parent_element, "Port", name=item.name+str(property_map_update(property_map, item.name)), direction="in", id=port_id_hash(parent_element.get("name"), item.as_pointer()))
 
-        extracted_vec_element = ET.SubElement(parent_element.getparent(), "Node", name=item.name, type="FunctionNodeInputVector")
+        extracted_vec_element = ET.SubElement(parent_element.getparent(), "Node", name=item.name+"_"+port_id_hash(parent_element.get("name"), f"{item.as_pointer()}vectorOut"), type="FunctionNodeInputVector")
         vec_value_counter = 0
         for i in item.default_value:
             ET.SubElement(extracted_vec_element, "Constant", name="Value"+str(vec_value_counter), value=str(i))
@@ -278,12 +280,11 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                     continue  # Skip unlinked output items
 
                 # extract item into new node
-                property_map_update(property_map, "extraction_counter")
                 if hasattr(item, 'default_value'):
                     if isinstance(item.default_value, bpy.types.bpy_prop_array):
                         item_element = ET.SubElement(parent_element, "Port", name=item.name+str(property_map_update(property_map, item.name)), direction="in", id=port_id_hash(parent_element.get("name"), item.as_pointer()))
 
-                        extracted_vec_element = ET.SubElement(parent_element.getparent(), "Node", name=item.name+str(property_map_update(property_map, "extraction_counter")), type="FunctionNodeInputVector")
+                        extracted_vec_element = ET.SubElement(parent_element.getparent(), "Node", name=item.name+"_"+port_id_hash(parent_element.get("name"), f"{item.as_pointer()}vectorOut"), type="FunctionNodeInputVector")
                         vec_value_counter = 0
                         for i in range(3):
                             ET.SubElement(extracted_vec_element, "Constant", name="Value"+str(vec_value_counter), value=str(item.default_value[i]))
@@ -299,7 +300,7 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                     else:
                         item_element = ET.SubElement(parent_element, "Port", name=item.name+str(property_map_update(property_map, item.name)), direction="in", id=port_id_hash(parent_element.get("name"), item.as_pointer()))
 
-                        extracted_element = ET.SubElement(parent_element.getparent(), "Node", name=item.name+str(property_map_update(property_map, "extraction_counter")), type="ShaderNodeValue")
+                        extracted_element = ET.SubElement(parent_element.getparent(), "Node", name=item.name+"_"+port_id_hash(parent_element.get("name"), f"{item.as_pointer()}valueOut"), type="ShaderNodeValue")
                         ET.SubElement(extracted_element, "Constant", name=item.name, value=str(item.default_value))
                         extracted_out_socket = ET.SubElement(extracted_element, "Port", name="Value", direction="out", id=port_id_hash(parent_element.get("name"), f"{item.as_pointer()}valueOut"))
 
@@ -344,35 +345,33 @@ def port_id_hash(parent_name, item_pointer):
     return hashlib.sha1(f'{parent_name}{item_pointer}'.encode()).hexdigest()
 
 def connect_wrapperIN_to_innerOUT(wrapper_node_element, inner_input_node_element, wrapper_node, inner_node):
-    attribute_count = len(inner_node.outputs) + 2
+    inner_property_map = {}
+    outer_property_map = {}
     for output_socket in inner_node.outputs:
             if output_socket.name == "":  # there is always an unnamed placeholder socket, skip that b*
                 continue
             outer_id = port_id_hash(wrapper_node.get("name"), f"{output_socket.as_pointer()}_WrapperIn-Output")
             inner_id = port_id_hash(inner_node.get("name"), f"{output_socket.as_pointer()}_InnerIn-Input")
-            ET.SubElement(wrapper_node_element, "Port", name=output_socket.name+str(attribute_count), direction="out", id=outer_id)
-            ET.SubElement(inner_input_node_element, "Port", name=output_socket.name+str(attribute_count), direction="in", id=inner_id)
+            ET.SubElement(wrapper_node_element, "Port", name=output_socket.name+str(property_map_update(outer_property_map, output_socket.name)), direction="out", id=outer_id)
+            ET.SubElement(inner_input_node_element, "Port", name=output_socket.name+str(property_map_update(inner_property_map, output_socket.name)), direction="in", id=inner_id)
             connection_element = ET.SubElement(wrapper_node_element.getparent(), "Connection")
             connection_element.set("from", outer_id)
             connection_element.set("to", inner_id)
 
-            attribute_count += 1
-
 
 def connect_innerOUT_to_wrapperIN(wrapper_node_element, inner_output_node_element, wrapper_node, inner_node):
-    attribute_count = len(inner_node.inputs) + 2
+    inner_property_map = {}
+    outer_property_map = {}
     for input_socket in inner_node.inputs:
             if input_socket.name == "":  # there is always an unnamed placeholder socket, skip that b*
                 continue
             outer_id = port_id_hash(wrapper_node.get("name"), f"{input_socket.as_pointer()}_WrapperOUT-Input")
             inner_id = port_id_hash(inner_node.get("name"), f"{input_socket.as_pointer()}_InnerOUT-Output")
-            ET.SubElement(inner_output_node_element, "Port", name=input_socket.name+str(attribute_count), direction="out", id=inner_id)
-            ET.SubElement(wrapper_node_element, "Port", name=input_socket.name+str(attribute_count), direction="in", id=outer_id)
+            ET.SubElement(inner_output_node_element, "Port", name=input_socket.name+str(property_map_update(inner_property_map, input_socket.name)), direction="out", id=inner_id)
+            ET.SubElement(wrapper_node_element, "Port", name=input_socket.name+str(property_map_update(outer_property_map, input_socket.name)), direction="in", id=outer_id)
             connection_element = ET.SubElement(wrapper_node_element.getparent(), "Connection")
             connection_element.set("from", inner_id)
             connection_element.set("to", outer_id)
-
-            attribute_count += 1
 
 def property_map_update(property_map, prop_name):
     if prop_name in property_map:
