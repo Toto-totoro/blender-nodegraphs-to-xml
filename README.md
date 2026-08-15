@@ -7,7 +7,7 @@ Blender Addon to export node-groups and materials aka geometry/shader node graph
 > to accomodate for future tweaks to the material conversion functionality
 
 # Installation
-1. zip this project and import it in Blender via Edit -> Preferences -> Add-ons -> Install from Disk (dropdown arrow top right)
+1. zip this project and import it in Blender via Edit -> Preferences -> Get Extensions -> Install from Disk (dropdown arrow top right)
 
 # Ussage
 File -> Export -> Node Groups (.xml) \
