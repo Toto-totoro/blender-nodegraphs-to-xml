@@ -42,7 +42,7 @@ class ExportNodeGroupsSelector(bpy.types.Operator):
         options={'HIDDEN'}
     )
 
-    # draws UI for selecting the materials to export as a checkbox list
+    # draws UI for selecting the node groups to export as a checkbox list
     def draw(self, context):
         layout = self.layout
         layout.prop(self, "select_all")
@@ -62,7 +62,7 @@ class ExportNodeGroupsSelector(bpy.types.Operator):
         self.old_select_all = False
         return context.window_manager.invoke_props_dialog(self)
 
-    # Checks and updates the list of materials to export when the "Select Everything" checkbox is toggled
+    # Checks and updates the list of node groups to export when the "Select Everything" checkbox is toggled
     def check(self, context):
         if self.select_all != self.old_select_all:
             for item in context.blend_data.node_groups:
