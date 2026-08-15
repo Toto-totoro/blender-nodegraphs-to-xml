@@ -206,12 +206,11 @@ def convert_node_properties_to_xml(node, node_element, filter_unnecessary=None):
             # collection properties (inputs, outputs)
             if isinstance(prop, bpy.types.bpy_prop_collection):
                 
-                property_map = convert_bpy_collection_to_xml(prop, prop_name, node_element, property_map)
+                convert_bpy_collection_to_xml(prop, prop_name, node_element, property_map)
 
             # standard type properties
             elif isinstance(prop, (str, int, float, bool)):
-                property_map = property_map_update(property_map, prop_name)
-                ET.SubElement(node_element, "Constant", name=prop_name+str(property_map[prop_name]), value=str(prop))
+                ET.SubElement(node_element, "Constant", name=prop_name+str(property_map_update(property_map, prop_name)), value=str(prop))
 
             # mapping properties (TexMapping, ColorMapping)
             #! Not Sure if these are even needed lol
@@ -220,25 +219,26 @@ def convert_node_properties_to_xml(node, node_element, filter_unnecessary=None):
 
             # vector properties (Vector)
             elif isinstance(prop, mathutils.Vector):
-                property_map = convert_mathutils_vector_to_xml(prop, prop_name, node_element, property_map)
+                convert_mathutils_vector_to_xml(prop, prop_name, node_element, property_map)
             elif isinstance(prop, bpy.types.GeometryNodeTree) or isinstance(prop, bpy.types.ShaderNodeTree):
                 continue  # Skip node_tree properties, handled elsewhere
 
             else:
                 print(f"Unsupported property type for {prop_name} in node {node.name}: {type(prop)}")
+                
 
 
 
 
 def convert_mathutils_vector_to_xml(item, item_name, parent_element, property_map):
     try:
-        property_map = property_map_update(property_map, item_name)
-        item_element = ET.SubElement(parent_element, "Port", name=item.name+str(property_map[item.name]), direction="in", id=port_id_hash(parent_element.get("name"), item.as_pointer()))
+        item_element = ET.SubElement(parent_element, "Port", name=item.name+str(property_map_update(property_map, item.name)), direction="in", id=port_id_hash(parent_element.get("name"), item.as_pointer()))
 
-        extracted_vec_element = ET.SubElement(parent_element.getparent(), "Node", name=item.name, type=str(getattr(item, 'type', None)))
+        extracted_vec_element = ET.SubElement(parent_element.getparent(), "Node", name=item.name, type="FunctionNodeInputVector")
         vec_value_counter = 0
         for i in item.default_value:
-            ET.SubElement(extracted_vec_element, "Constant", name=item.name+str(vec_value_counter), value=str(i))
+            ET.SubElement(extracted_vec_element, "Constant", name="Value"+str(vec_value_counter), value=str(i))
+            vec_value_counter += 1
         extracted_vec_element_outsocket = ET.SubElement(extracted_vec_element, "Port", name="vectorOut", direction="out", id=port_id_hash(parent_element.get("name"), f"{item.as_pointer()}vectorOut"))
 
         connection_element = ET.SubElement(parent_element.getparent(), "Connection")
@@ -251,7 +251,6 @@ def convert_mathutils_vector_to_xml(item, item_name, parent_element, property_ma
         print(f"{item_name}: {type(item)} | is not a mathutils.Vector")
         traceback.print_exc()
 
-    return property_map
 
 # def convert_mathutils_euler_to_xml(prop, prop_name, parent_element):
 #     try:
@@ -273,48 +272,49 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                 continue
 
             if item.is_linked:
-                property_map = property_map_update(property_map, prop_name)
-                item_element = ET.SubElement(parent_element, "Port", name=item.name+str(property_map[prop_name]), direction="out" if item.is_output else "in", id=port_id_hash(parent_element.get("name"), item.as_pointer()))
+                item_element = ET.SubElement(parent_element, "Port", name=item.name+str(property_map_update(property_map, item.name)), direction="out" if item.is_output else "in", id=port_id_hash(parent_element.get("name"), item.as_pointer()))
             else:
                 if item.is_output:
                     continue  # Skip unlinked output items
-                
+
+                # extract item into new node
+                property_map_update(property_map, "extraction_counter")
                 if hasattr(item, 'default_value'):
-
-                    item_element = None
-                    extracted_out_socket = None
-
                     if isinstance(item.default_value, bpy.types.bpy_prop_array):
-                        property_map = property_map_update(property_map, prop_name)
-                        item_element = ET.SubElement(parent_element, "Port", name=item.name+str(property_map[prop_name]), direction="in", id=port_id_hash(parent_element.get("name"), item.as_pointer()))
+                        item_element = ET.SubElement(parent_element, "Port", name=item.name+str(property_map_update(property_map, item.name)), direction="in", id=port_id_hash(parent_element.get("name"), item.as_pointer()))
 
-                        extracted_vec_element = ET.SubElement(parent_element.getparent(), "Node", name="FunctionNodeInputVector", type=str(getattr(item, 'type', None)))
-                        vec_coordinate_names = ['x', 'y', 'z']
+                        extracted_vec_element = ET.SubElement(parent_element.getparent(), "Node", name=item.name+str(property_map_update(property_map, "extraction_counter")), type="FunctionNodeInputVector")
+                        vec_value_counter = 0
                         for i in range(3):
-                            ET.SubElement(extracted_vec_element, "Constant", name=vec_coordinate_names[i], value=str(item.default_value[i]))
-                        extracted_out_socket = ET.SubElement(extracted_vec_element, "Port", name="vectorOut", direction="out", id=port_id_hash(parent_element.get("name"), f"{item.as_pointer()}vectorOut"))
+                            ET.SubElement(extracted_vec_element, "Constant", name="Value"+str(vec_value_counter), value=str(item.default_value[i]))
+                            vec_value_counter += 1
+                        extracted_vec_out_socket = ET.SubElement(extracted_vec_element, "Port", name="vectorOut", direction="out", id=port_id_hash(parent_element.get("name"), f"{item.as_pointer()}vectorOut"))
+
+                        connection_element = ET.SubElement(parent_element.getparent(), "Connection")
+                        from_id = extracted_vec_out_socket.get("id")
+                        to_id = item_element.get('id')
+                        connection_element.set("from", from_id)
+                        connection_element.set("to", to_id)
 
                     else:
-                        property_map = property_map_update(property_map, prop_name)
-                        item_element = ET.SubElement(parent_element, "Port", name=item.name+str(property_map[prop_name]), direction="in", id=port_id_hash(parent_element.get("name"), item.as_pointer()))
+                        item_element = ET.SubElement(parent_element, "Port", name=item.name+str(property_map_update(property_map, item.name)), direction="in", id=port_id_hash(parent_element.get("name"), item.as_pointer()))
 
-                        extracted_element = ET.SubElement(parent_element.getparent(), "Node", name="ShaderNodeValue", type=str(getattr(item, 'type', None)))
+                        extracted_element = ET.SubElement(parent_element.getparent(), "Node", name=item.name+str(property_map_update(property_map, "extraction_counter")), type="ShaderNodeValue")
                         ET.SubElement(extracted_element, "Constant", name=item.name, value=str(item.default_value))
                         extracted_out_socket = ET.SubElement(extracted_element, "Port", name="Value", direction="out", id=port_id_hash(parent_element.get("name"), f"{item.as_pointer()}valueOut"))
 
-                    connection_element = ET.SubElement(parent_element.getparent(), "Connection")
-                    from_id = extracted_out_socket.get("id")
-                    to_id = item_element.get('id')
-                    connection_element.set("from", from_id)
-                    connection_element.set("to", to_id)
+                        connection_element = ET.SubElement(parent_element.getparent(), "Connection")
+                        from_id = extracted_out_socket.get("id")
+                        to_id = item_element.get('id')
+                        connection_element.set("from", from_id)
+                        connection_element.set("to", to_id)
 
-            attribute_count += 1
+                    
+
 
     except Exception as e:
         print(f"{prop_name}: {type(prop)} | is not a bpy.types.bpy_prop_collection")
         traceback.print_exc()
-
-    return property_map
 
 
 
