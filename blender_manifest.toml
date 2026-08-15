@@ -1,4 +1,4 @@
-# Blender NodeGraphs_to_XML
+# blender-nodegraphs-to-xml
 # Contributor(s): Tom Schäfer (tschaefer.acc@gmail.com) and Laurin von Bergmann
 #
 # This program is free software; you can redistribute it and/or modify
@@ -16,14 +16,14 @@
 
 schema_version = "1.0.0"
 
-id = "NodeGraphs_to_XML"
+id = "nodegraphs-to-xml"
 version = "1.1.0"
-name = "NodeGraphs_to_XML"
+name = "nodegraphs-to-xml"
 tagline = "Exports a node-graph (material or nodegroup) into a serialized graph in XML."
 maintainer = "Tom Schäfer <tschaefer.acc@gmail.com>, Laurin von Bergmann"
 type = "add-on"
 
-website = "https://github.com/Toto-totoro/Blender-NodeGraphs_to_XML/"
+website = "https://github.com/Toto-totoro/blender-nodegraphs-to-xml/"
 
 blender_version_min = "4.2.0"
 

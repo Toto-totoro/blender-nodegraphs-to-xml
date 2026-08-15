@@ -1,4 +1,4 @@
-# Blender NodeGraphs_to_XML
+# blender-nodegraphs-to-xml
 # Contributor(s): Tom Schäfer (tschaefer.acc@gmail.com) and Laurin von Bergmann
 #
 # This program is free software; you can redistribute it and/or modify
