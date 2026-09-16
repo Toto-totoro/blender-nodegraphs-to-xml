@@ -1,7 +1,6 @@
 # blender-nodegraphs-to-xml
 # Contributor(s): Tom Schäfer (tschaefer.acc@gmail.com) and Laurin von Bergmann
 #
-#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 3 of the License, or
@@ -15,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-#! if you come across weridly looking code, most is intentional and sometimes a bit hacky, since blenders api design is not really consequent from older to newer features.
+#! if you come across weridly looking code, most is intentional and sometimes a bit hacky, since blenders api design is not really consistent from older to newer features.
 
 import bpy
 import mathutils
@@ -33,36 +32,44 @@ def convert_node_graphs_to_xml(node_graphs: list) -> str:
     #* this stupid way of id generation is used because blender does not allow easy use of global variables
     graph_id = 0
     for node_graph in node_graphs:
-        graph_id = convert_node_graph_to_xml(node_graph, root, graph_id)
-        graph_id += 1
+        try:
+            graph_id = convert_node_graph_to_xml(node_graph, root, graph_id)
+            graph_id += 1
+        except Exception as e:
+            print(f"Error converting node graph {node_graph.name}: {e}")
+            traceback.print_exc()
 
     return ET.tostring(root, pretty_print=True).decode()
 
 def convert_node_graph_to_xml(node_graph, root, graph_id) -> int:
     """
     Converts a single Blender node group into an XML element and appends it to the provided root element. \n
-    Returns graph_id, which increments for each recursive node group conversion to ensure unique graph ids in the XML representation.
+    Return:
+      graph_id, which increments for each recursive node group conversion to ensure unique graph ids in the XML representation. \n
+      or \n
+      Exception
     """
 
     is_material = True if type(node_graph) is bpy.types.Material else False
-
     nodegroup_element = ET.SubElement(root, "Graph", name=node_graph.name, id=str(graph_id), type="Material" if is_material else "NodeGroup")
 
-    # Iterate through the nodes in the node group
     for node in node_graph.nodes if not is_material else node_graph.node_tree.nodes:
         
         # check for node groups and convert them recursively
         node_is_nodegroup = node.bl_idname == "ShaderNodeGroup" or node.bl_idname == "GeometryNodeGroup"
         if node_is_nodegroup:
             if node.node_tree is not None:
-                graph_id += 1
-                graph_id = convert_node_graph_to_xml(node.node_tree, nodegroup_element, graph_id)
-                convert_nodegroup_node_to_xml(node, nodegroup_element, graph_id)
+                try:
+                    graph_id += 1
+                    graph_id = convert_node_graph_to_xml(node.node_tree, nodegroup_element, graph_id)
+                    convert_nodegroup_node_to_xml(node, nodegroup_element, graph_id)
+                except Exception as e:
+                    print(f"Error converting node group {node.name}")
+                    return e  # propagate exception
+                
                 continue  # Skip the rest for node groups
             else:
                 print(f"Node group {node.name} has no node tree assigned.")
-            
-
 
         node_element = ET.SubElement(nodegroup_element, "Node", name=node.name, type=node.bl_idname)
 
@@ -112,13 +119,9 @@ def convert_node_graph_to_xml(node_graph, root, graph_id) -> int:
                 }
         convert_node_properties_to_xml(node, node_element, filter_unnecessary)
 
-
-
-
     # Store node links
     # Format: <Connection from='hash_id' to='hash_id' />
-    # hash = sha1 of (per graph unique) node name and pointer
-        # (TODO: sort links in graph order)
+    # hash = sha1 of (per graph unique) node name and pointer (may vary for extraced nodes in `convert_mathutils_vector_to_xml()` and `convert_bpy_collection_to_xml()` to ensure it's unique)
     for link in node_graph.links if not is_material else node_graph.node_tree.links:
         from_id = port_id_hash(link.from_node.name, link.from_socket.as_pointer())
         to_id = port_id_hash(link.to_node.name, link.to_socket.as_pointer())
@@ -132,13 +135,20 @@ def convert_node_graph_to_xml(node_graph, root, graph_id) -> int:
 # Conversion Helpers for different node/property types #
 ########################################################
 
-# this function should always be called after the inner node group has been converted to xml
-# this might fail to work correctly if the inner node group has more than one input or output node (which shouldn't be the case)
+#! this might fail to work correctly if the inner node group has more than one input or output node (which shouldn't be the case)
 def convert_nodegroup_node_to_xml(node, parent_element, graph_id):
-    # split nodegroup node in 2 to wrap the inner node graph
-    # this allows to easily route the inner node graph inputs and outputs to the outer node graph
-    wrapperIN_node_element = ET.SubElement(parent_element, "Node", name=node.name+'_WrapperIn', type=node.bl_idname+"Input")
-    wrapperOUT_node_element = ET.SubElement(parent_element, "Node", name=node.name+'_WrapperOut', type=node.bl_idname+"Output")
+    """
+    This function should always be called after the inner node group has been converted to xml \n
+    Converts the nodegroup node (for recursive node_groups) by splitting it and wrapping the inner node graph.
+
+    Args:
+        node: The node to convert
+        parent_element: The nodes parent
+        graph_id: The id of the corresponding node graph this node wraps
+
+    Returns:
+        Exception if the group input or output node of the inner node graph could not be found in the xml representation
+    """
 
     # retrieve the inner input and output nodes of the node group in the xml representation
     # the nodes are generated into the xml seperately and by using the id and (normally) unique node names we can find them again
@@ -146,6 +156,17 @@ def convert_nodegroup_node_to_xml(node, parent_element, graph_id):
     # TODO: though this should never be able to fail, a failsafe fallback should be implemented
     inner_input_node_element = parent_element.xpath(f"Graph[@id='{graph_id}']/Node[contains(@name, 'Group Input')]")[0]
     inner_output_node_element = parent_element.xpath(f"Graph[@id='{graph_id}']/Node[contains(@name, 'Group Output')]")[0]
+
+    if inner_input_node_element is None:
+        return Exception(f"Could not find group input node for node group {node.name} in graph id {graph_id}. It either doesn't exist in blender or hasn't been converted to xml yet.")
+    if inner_output_node_element is None:
+        return Exception(f"Could not find group output node for node group {node.name} in graph id {graph_id}. It either doesn't exist in blender or hasn't been converted to xml yet.")
+
+    # split nodegroup node in 2 to wrap the inner node graph
+    # this allows to easily route the inner node graph inputs and outputs to the outer node graph
+    wrapperIN_node_element = ET.SubElement(parent_element, "Node", name=node.name+'_WrapperIn', type=node.bl_idname+"Input")
+    wrapperOUT_node_element = ET.SubElement(parent_element, "Node", name=node.name+'_WrapperOut', type=node.bl_idname+"Output")
+
 
     inner_input_node = node.node_tree.nodes.get('Group Input')
     inner_output_node = node.node_tree.nodes.get('Group Output')
@@ -219,11 +240,18 @@ def convert_node_properties_to_xml(node, node_element, filter_unnecessary=None):
             A dictionary mapping property names to their values.
         """
 
-        property_map = {}
+        
+        property_map = {} # keeps track of property names added to a node to ensure per node unique property names: names are per name numbered; e.g. "value0, value1, operation0, value2, ..."
+
         for prop_name in node.bl_rna.properties.keys():
-            if filter_unnecessary != None and prop_name in filter_unnecessary:  # filter out unnecessary properties
+            if filter_unnecessary != None and prop_name in filter_unnecessary:
                 continue
+
             prop = getattr(node, prop_name)
+
+            #* handle new property types here
+            # currently unsupported: TexMapping, ColorMapping, mathutils.Euler
+            # probably only need to implement new ones if you use custom properties
 
             # collection properties (inputs, outputs)
             if isinstance(prop, bpy.types.bpy_prop_collection):
@@ -242,8 +270,10 @@ def convert_node_properties_to_xml(node, node_element, filter_unnecessary=None):
             # vector properties (Vector)
             elif isinstance(prop, mathutils.Vector):
                 convert_mathutils_vector_to_xml(prop, prop_name, node_element, property_map)
+
+
             elif isinstance(prop, bpy.types.GeometryNodeTree) or isinstance(prop, bpy.types.ShaderNodeTree):
-                continue  # Skip node_tree properties, handled elsewhere
+                continue  # Skip node_tree properties, handled recursively in `convert_node_graph_to_xml()`
 
             else:
                 print(f"Unsupported property type for {prop_name} in node {node.name}: {type(prop)}")
@@ -255,6 +285,9 @@ def convert_node_properties_to_xml(node, node_element, filter_unnecessary=None):
 
 
 def convert_mathutils_vector_to_xml(item, item_name, parent_element, property_map):
+    """
+    Extracts the given vector property into a new Node, creates a port at the original Node and connects them.
+    """
     try:
         item_element = ET.SubElement(parent_element, "Port", name=item.name+str(property_map_update(property_map, item.name)), direction="in", id=port_id_hash(parent_element.get("name"), item.as_pointer()))
 
@@ -290,6 +323,15 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
     Takes a blender bpy_prop_collection element and converts it into an XML representation, appending it to the provided parent element. \n
     Is mainly used for node inputs and outputs, but can be used for any bpy_prop_collection. \n
     The function handles linked and unlinked items differently. Unlinked items usually represent constants. They are extracted into new nodes and then connected back to the original node as ports. \n
+
+    Args:
+        prop: The property object to convert
+        prop_name: The string name of the property
+        parent_element: The XML parent element (usually Node) to append this to
+        property_map: A map to keep track of names for numbering
+
+    Returns:
+        property_map to update the input property_map
     """
     try:
         for item in prop:
@@ -304,6 +346,12 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
 
                 # extract item into new node
                 if hasattr(item, 'default_value'):
+
+                    #* handle new datatypes for inputs/ouputs here
+                    # currently supported: Vector (bpy_prop_array), bool, int, str, Value (float)
+                    # currently unsupported: Collection, Color, Image, Material, Object,
+
+                    # Vector
                     if isinstance(item.default_value, bpy.types.bpy_prop_array):
                         item_element = ET.SubElement(parent_element, "Port", name=item.name+str(property_map_update(property_map, item.name)), direction="in", id=port_id_hash(parent_element.get("name"), item.as_pointer()))
 
@@ -319,16 +367,28 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                         to_id = item_element.get('id')
                         create_connection_element(parent_element.getparent(), from_id, to_id)
 
-                    else:
+                    # bool, int, str, float
+                    elif isinstance(item.default_value, (int, float, str, bool)):
                         item_element = ET.SubElement(parent_element, "Port", name=item.name+str(property_map_update(property_map, item.name)), direction="in", id=port_id_hash(parent_element.get("name"), item.as_pointer()))
 
-                        extracted_element = ET.SubElement(parent_element.getparent(), "Node", name=item.name+"_"+port_id_hash(parent_element.get("name"), f"{item.as_pointer()}valueOut"), type="ShaderNodeValue")
+                        type_to_node = {
+                            int: "FunctionNodeInputInt",
+                            str: "FunctionNodeInputString",
+                            float: "ShaderNodeValue",
+                            bool: "FunctionNodeInputBool"
+                        }
+
+                        extracted_element = ET.SubElement(parent_element.getparent(), "Node", name=item.name+"_"+port_id_hash(parent_element.get("name"), f"{item.as_pointer()}valueOut"), type=type_to_node.get(type(item.default_value), "ShaderNodeValue"))
                         ET.SubElement(extracted_element, "Constant", name=item.name, value=str(item.default_value))
                         extracted_out_socket = ET.SubElement(extracted_element, "Port", name="Value", direction="out", id=port_id_hash(parent_element.get("name"), f"{item.as_pointer()}valueOut"))
 
                         from_id = extracted_out_socket.get("id")
                         to_id = item_element.get('id')
                         create_connection_element(parent_element.getparent(), from_id, to_id)
+
+                    else:
+                        print(f"value: {item.default_value}, type: {type(item.default_value)} | is an unsupported type in bpy_prop_collection: (parent node: {parent_element.get("name")}, porperty: {prop_name})")
+
 
                     
 
@@ -339,7 +399,7 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
 
 
 
-# TODO: ColorMapping has item ColorRamp, which is a collection (of ColorRampElements); needs special handling, not imlemented yet (only for Shader Nodes, since ColorMapping is not used in Geometry Nodes afaik)
+#* ColorMapping has item ColorRamp, which is a collection (of ColorRampElements); needs special handling, not imlemented yet (only for Shader Nodes, since ColorMapping is not used in Geometry Nodes afaik)
 # def convert_bpy_mapping_to_xml(prop, prop_name, parent_element):
 #     texture_mapping_element = ET.SubElement(parent_element, "Constant", name=prop_name)
 #     for item, item_value in prop.bl_rna.properties.items():
