@@ -287,13 +287,17 @@ def convert_node_properties_to_xml(node, node_element, filter_unnecessary=None):
                 ET.SubElement(node_element, "Constant", name=prop_name+str(property_map_update(property_map, prop_name)), value=str(prop))
 
             # mapping properties (TexMapping, ColorMapping)
-                #! Currectly deemed not needed
+                #* Currently deemed not needed
                 # elif isinstance(prop, bpy.types.TexMapping) or isinstance(prop, bpy.types.ColorMapping):
                 #    convert_bpy_mapping_to_xml(prop, prop_name, node_element)
 
             # vector properties (Vector)
             elif isinstance(prop, mathutils.Vector):
                 convert_mathutils_vector_to_xml(prop, prop_name, node_element, property_map)
+
+            # rotation properties (Euler)
+            elif isinstance(prop, mathutils.Euler):
+                convert_mathutils_euler_to_xml(prop, prop_name, node_element, property_map)
 
 
             elif isinstance(prop, bpy.types.GeometryNodeTree) or isinstance(prop, bpy.types.ShaderNodeTree):
@@ -313,33 +317,54 @@ def convert_mathutils_vector_to_xml(item, item_name, parent_element, property_ma
     Extracts the given vector property into a new Node, creates a port at the original Node and connects them.
     """
     try:
-        item_element = ET.SubElement(parent_element, "Port", name=item.name+str(property_map_update(property_map, item.name)), direction="in", id=port_id_hash(parent_element.get("name"), item.as_pointer()))
+        pseudo_pointer = f"{parent_element.get('name')}_{item_name}"
 
-        extracted_vec_element = ET.SubElement(parent_element.getparent(), "Node", name=item.name+"_"+port_id_hash(parent_element.get("name"), f"{item.as_pointer()}vectorOut"), type="FunctionNodeInputVector")
+        item_element = ET.SubElement(parent_element, "Port", name=item_name+str(property_map_update(property_map, item_name)), direction="in", id=port_id_hash(parent_element.get("name"), pseudo_pointer))
+
+        extracted_vector_element = ET.SubElement(parent_element.getparent(), "Node", name=item_name+"_"+port_id_hash(parent_element.get("name"), f"{pseudo_pointer}vectorOut"), type="FunctionNodeInputVector")
+
         vec_value_counter = 0
-        for i in item.default_value:
-            ET.SubElement(extracted_vec_element, "Constant", name="Value"+str(vec_value_counter), value=str(i))
+        for i in item:
+            ET.SubElement(extracted_vector_element, "Constant", name="Value"+str(vec_value_counter), value=str(i))
             vec_value_counter += 1
-        extracted_vec_element_outsocket = ET.SubElement(extracted_vec_element, "Port", name="vectorOut", direction="out", id=port_id_hash(parent_element.get("name"), f"{item.as_pointer()}vectorOut"))
 
-        from_id = extracted_vec_element_outsocket.get("id")
+        extracted_vector_element_outsocket = ET.SubElement(extracted_vector_element, "Port", name="vectorOut", direction="out", id=port_id_hash(parent_element.get("name"), f"{pseudo_pointer}vectorOut"))
+
+        from_id = extracted_vector_element_outsocket.get("id")
         to_id = item_element.get('id')
         create_connection_element(parent_element.getparent(), from_id, to_id)
 
     except Exception as e:
-        print(f"{item_name}: {type(item)} | is not a mathutils.Vector or broken: {e}")
+        print(f"{item_name}: {type(item)} | in (parent node: {parent_element.get('name')}, property: {item_name}) is either not a mathutils.Vector or broken: {e}")
         traceback.print_exc()
 
-#* not needed for now, also not up to date with the current code
-# def convert_mathutils_euler_to_xml(prop, prop_name, parent_element):
-#     try:
-#         euler_element = ET.SubElement(parent_element, "Property", name=prop_name, type=type(prop).__name__)
-#         for i, v in enumerate(prop):
-#             ET.SubElement(euler_element, "Value", data=str(v))
-#         ET.SubElement(euler_element, "Value", data=str(prop.order))
-#     except Exception as e:
-#         print(f"{prop_name}: {type(prop)} | is not a mathutils.Euler or broken: {e}")
-#         traceback.print_exc()
+
+
+def convert_mathutils_euler_to_xml(item, item_name, parent_element, property_map):
+    """
+    Extracts the given euler or rotation property into a new Node, creates a port at the original Node and connects them.
+    """
+    try:
+        pseudo_pointer = f"{parent_element.get('name')}_{item_name}"
+
+        item_element = ET.SubElement(parent_element, "Port", name=item_name+str(property_map_update(property_map, item_name)), direction="in", id=port_id_hash(parent_element.get("name"), pseudo_pointer))
+
+        extracted_vector_element = ET.SubElement(parent_element.getparent(), "Node", name=item_name+"_"+port_id_hash(parent_element.get("name"), f"{pseudo_pointer}vectorOut"), type="FunctionNodeInputRotation")
+
+        vec_value_counter = 0
+        for i in item:
+            ET.SubElement(extracted_vector_element, "Constant", name="Value"+str(vec_value_counter), value=str(i))
+            vec_value_counter += 1
+        ET.SubElement(extracted_vector_element, "Constant", name="Order"+"0", value=str(item.order))
+        extracted_vector_element_outsocket = ET.SubElement(extracted_vector_element, "Port", name="vectorOut", direction="out", id=port_id_hash(parent_element.get("name"), f"{pseudo_pointer}vectorOut"))
+
+        from_id = extracted_vector_element_outsocket.get("id")
+        to_id = item_element.get('id')
+        create_connection_element(parent_element.getparent(), from_id, to_id)
+
+    except Exception as e:
+        print(f"{item_name}: {type(item)} | in (parent node: {parent_element.get('name')}, property: {item_name}) is either not a mathutils.Euler or broken: {e}")
+        traceback.print_exc()
 
 
 def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map):
@@ -359,6 +384,7 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
     """
     try:
         for item in prop:
+
             if item is None:
                 continue
 
@@ -382,17 +408,36 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                     if isinstance(item.default_value, bpy.types.bpy_prop_array):
                         item_element = ET.SubElement(parent_element, "Port", name=item.name+str(property_map_update(property_map, item.name)), direction="in", id=port_id_hash(parent_element.get("name"), item.as_pointer()))
 
-                        extracted_vec_element = ET.SubElement(parent_element.getparent(), "Node", name=item.name+"_"+port_id_hash(parent_element.get("name"), f"{item.as_pointer()}vectorOut"), type="FunctionNodeInputVector")
+                        extracted_vector_element = ET.SubElement(parent_element.getparent(), "Node", name=item.name+"_"+port_id_hash(parent_element.get("name"), f"{item.as_pointer()}vectorOut"), type="FunctionNodeInputVector")
                         vec_value_counter = 0
                         # default_value can not be iterated over directly (blender stuff), so we have to access the values by index
                         for i in range(item.default_value.__len__()):
-                            ET.SubElement(extracted_vec_element, "Constant", name="Value"+str(vec_value_counter), value=str(item.default_value[i]))
+                            ET.SubElement(extracted_vector_element, "Constant", name="Value"+str(vec_value_counter), value=str(item.default_value[i]))
                             vec_value_counter += 1
-                        extracted_vec_out_socket = ET.SubElement(extracted_vec_element, "Port", name="vectorOut", direction="out", id=port_id_hash(parent_element.get("name"), f"{item.as_pointer()}vectorOut"))
+                        extracted_vec_out_socket = ET.SubElement(extracted_vector_element, "Port", name="vectorOut", direction="out", id=port_id_hash(parent_element.get("name"), f"{item.as_pointer()}vectorOut"))
 
                         from_id = extracted_vec_out_socket.get("id")
                         to_id = item_element.get('id')
                         create_connection_element(parent_element.getparent(), from_id, to_id)
+
+                    # Rotation (Euler)
+                    elif isinstance(item.default_value, bpy.types.NodeSocketRotation):
+                        item_element = ET.SubElement(parent_element, "Port", name=item.name+str(property_map_update(property_map, item.name)), direction="in", id=port_id_hash(parent_element.get("name"), item.as_pointer()))
+
+                        extracted_vector_element = ET.SubElement(parent_element.getparent(), "Node", name=item.name+"_"+port_id_hash(parent_element.get("name"), f"{item.as_pointer()}vectorOut"), type="FunctionNodeInputRotation")
+                        vec_value_counter = 0
+                        for i in item.default_value:
+                            ET.SubElement(extracted_vector_element, "Constant", name="Value"+str(vec_value_counter), value=str(i))
+                            vec_value_counter += 1
+                        ET.SubElement(extracted_vector_element, "Constant", name="Order"+"0", value=str(item.default_value.order))
+                        extracted_vec_out_socket = ET.SubElement(extracted_vector_element, "Port", name="vectorOut", direction="out", id=port_id_hash(parent_element.get("name"), f"{item.as_pointer()}vectorOut"))
+
+                        from_id = extracted_vec_out_socket.get("id")
+                        to_id = item_element.get('id')
+                        create_connection_element(parent_element.getparent(), from_id, to_id)
+
+                    elif isinstance(item.default_value, mathutils.Euler):
+                        convert_mathutils_euler_to_xml(item.default_value, item.name, parent_element, property_map)
 
                     # bool, int, str, float
                     elif isinstance(item.default_value, (int, float, str, bool)):
@@ -417,11 +462,9 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                         print(f"value: {item.default_value}, type: {type(item.default_value)} | is an unsupported type in bpy_prop_collection: (parent node: {parent_element.get('name')}, porperty: {prop_name})")
 
 
-                    
-
 
     except Exception as e:
-        print(f"{prop_name}: {type(prop)} | is not a bpy.types.bpy_prop_collection")
+        print(f"{prop_name}: {type(prop)} | is not a bpy.types.bpy_prop_collection or some of its items are broken: {e}")
         traceback.print_exc()
 
 
