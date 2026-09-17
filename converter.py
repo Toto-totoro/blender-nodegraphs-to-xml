@@ -123,8 +123,23 @@ def convert_node_graph_to_xml(node_graph, root, graph_id) -> int:
     # Format: <Connection from='hash_id' to='hash_id' />
     # hash = sha1 of (per graph unique) node name and pointer (may vary for extraced nodes in `convert_mathutils_vector_to_xml()` and `convert_bpy_collection_to_xml()` to ensure it's unique)
     for link in node_graph.links if not is_material else node_graph.node_tree.links:
-        from_id = port_id_hash(link.from_node.name, link.from_socket.as_pointer())
-        to_id = port_id_hash(link.to_node.name, link.to_socket.as_pointer())
+        if link.from_node is None or link.to_node is None:
+            print(f"Link from {link.from_node} to {link.to_node} is invalid. Skipping.")
+            continue
+        if link.from_socket is None or link.to_socket is None:
+            print(f"Link from {link.from_node.name} to {link.to_node.name} has invalid sockets. Skipping.")
+            continue
+
+        # GROUP nodes are split into 2 in `convert_nodegroup_node_to_xml()`, so names need to be adjusted accordingly
+        from_node_name = link.from_node.name
+        to_node_name = link.to_node.name
+        if link.from_node.type == "GROUP":
+            from_node_name += "_WrapperOut"
+        if link.to_node.type == "GROUP":
+            to_node_name += "_WrapperIn"
+
+        from_id = port_id_hash(from_node_name, link.from_socket.as_pointer())
+        to_id = port_id_hash(to_node_name, link.to_socket.as_pointer())
         create_connection_element(nodegroup_element, from_id, to_id)
 
     return graph_id
@@ -340,11 +355,14 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
 
             if item.is_linked:
                 item_element = ET.SubElement(parent_element, "Port", name=item.name+str(property_map_update(property_map, item.name)), direction="out" if item.is_output else "in", id=port_id_hash(parent_element.get("name"), item.as_pointer()))
-            else:
-                if item.is_output:
-                    continue  # Skip unlinked output items
 
-                # extract item into new node
+            # extract unlinked input item into new node
+            else:
+                # Skip unlinked output items
+                if item.is_output:
+                    continue  
+
+                
                 if hasattr(item, 'default_value'):
 
                     #* handle new datatypes for inputs/ouputs here
