@@ -61,11 +61,12 @@ def convert_node_graph_to_xml(node_graph, root, graph_id) -> int:
             if node.node_tree is not None:
                 try:
                     graph_id += 1
+                    current_graph_id = graph_id
                     graph_id = convert_node_graph_to_xml(node.node_tree, nodegroup_element, graph_id)
-                    convert_nodegroup_node_to_xml(node, nodegroup_element, graph_id)
+                    convert_nodegroup_node_to_xml(node, nodegroup_element, current_graph_id) #! needs to be called after inner node group is converted
                 except Exception as e:
                     print(f"Error converting node group {node.name}")
-                    return e  # propagate exception
+                    raise e
                 
                 continue  # Skip the rest for node groups
             else:
@@ -168,14 +169,22 @@ def convert_nodegroup_node_to_xml(node, parent_element, graph_id):
     # retrieve the inner input and output nodes of the node group in the xml representation
     # the nodes are generated into the xml seperately and by using the id and (normally) unique node names we can find them again
     #* sadly currently simplest way for this since global variables are a little tricky in blender
-    # TODO: though this should never be able to fail, a failsafe fallback should be implemented
-    inner_input_node_element = parent_element.xpath(f"Graph[@id='{graph_id}']/Node[contains(@name, 'Group Input')]")[0]
-    inner_output_node_element = parent_element.xpath(f"Graph[@id='{graph_id}']/Node[contains(@name, 'Group Output')]")[0]
+    inner_input_node_element = parent_element.xpath(f"Graph[@id='{graph_id}']/Node[contains(@name, 'Group Input')]")
+    inner_output_node_element = parent_element.xpath(f"Graph[@id='{graph_id}']/Node[contains(@name, 'Group Output')]")
 
-    if inner_input_node_element is None:
-        return Exception(f"Could not find group input node for node group {node.name} in graph id {graph_id}. It either doesn't exist in blender or hasn't been converted to xml yet.")
-    if inner_output_node_element is None:
-        return Exception(f"Could not find group output node for node group {node.name} in graph id {graph_id}. It either doesn't exist in blender or hasn't been converted to xml yet.")
+    if not inner_input_node_element:
+        raise Exception(f"Could not find group input node for node group {node.name} in graph id {graph_id}. It either doesn't exist in blender or hasn't been converted to xml yet.")
+    if not inner_output_node_element:
+        raise Exception(f"Could not find group output node for node group {node.name} in graph id {graph_id}. It either doesn't exist in blender or hasn't been converted to xml yet.")
+
+    if len(inner_input_node_element) > 1:
+        raise Exception(f"Found multiple group input nodes for node group {node.name} in graph id {graph_id}. Only one should exist.")
+    if len(inner_output_node_element) > 1:
+        raise Exception(f"Found multiple group output nodes for node group {node.name} in graph id {graph_id}. Only one should exist.")
+
+    inner_input_node_element = inner_input_node_element[0]
+    inner_output_node_element = inner_output_node_element[0]
+
 
     # split nodegroup node in 2 to wrap the inner node graph
     # this allows to easily route the inner node graph inputs and outputs to the outer node graph
@@ -318,7 +327,7 @@ def convert_mathutils_vector_to_xml(item, item_name, parent_element, property_ma
         create_connection_element(parent_element.getparent(), from_id, to_id)
 
     except Exception as e:
-        print(f"{item_name}: {type(item)} | is not a mathutils.Vector")
+        print(f"{item_name}: {type(item)} | is not a mathutils.Vector or broken: {e}")
         traceback.print_exc()
 
 #* not needed for now, also not up to date with the current code
@@ -329,7 +338,7 @@ def convert_mathutils_vector_to_xml(item, item_name, parent_element, property_ma
 #             ET.SubElement(euler_element, "Value", data=str(v))
 #         ET.SubElement(euler_element, "Value", data=str(prop.order))
 #     except Exception as e:
-#         print(f"{prop_name}: {type(prop)} | is not a mathutils.Euler")
+#         print(f"{prop_name}: {type(prop)} | is not a mathutils.Euler or broken: {e}")
 #         traceback.print_exc()
 
 
@@ -405,7 +414,7 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                         create_connection_element(parent_element.getparent(), from_id, to_id)
 
                     else:
-                        print(f"value: {item.default_value}, type: {type(item.default_value)} | is an unsupported type in bpy_prop_collection: (parent node: {parent_element.get("name")}, porperty: {prop_name})")
+                        print(f"value: {item.default_value}, type: {type(item.default_value)} | is an unsupported type in bpy_prop_collection: (parent node: {parent_element.get('name')}, porperty: {prop_name})")
 
 
                     
@@ -462,8 +471,8 @@ def connect_wrapperIN_to_innerIN(wrapper_node_element, inner_input_node_element,
     for output_socket in inner_node.outputs:
             if output_socket.name == "":  # there is always an unnamed placeholder socket, skip that b*
                 continue
-            outer_id = port_id_hash(wrapper_node.get("name"), f"{output_socket.as_pointer()}_WrapperIn-Output")
-            inner_id = port_id_hash(inner_node.get("name"), f"{output_socket.as_pointer()}_InnerIn-Input")
+            outer_id = port_id_hash(wrapper_node.name, f"{output_socket.as_pointer()}_WrapperIn-Output")
+            inner_id = port_id_hash(inner_node.name, f"{output_socket.as_pointer()}_InnerIn-Input")
             ET.SubElement(wrapper_node_element, "Port", name=output_socket.name+str(property_map_update(outer_property_map, output_socket.name)), direction="out", id=outer_id)
             ET.SubElement(inner_input_node_element, "Port", name=output_socket.name+str(property_map_update(inner_property_map, output_socket.name)), direction="in", id=inner_id)
             create_connection_element(wrapper_node_element.getparent(), outer_id, inner_id)
@@ -478,8 +487,8 @@ def connect_innerOUT_to_wrapperOUT(wrapper_node_element, inner_output_node_eleme
     for input_socket in inner_node.inputs:
             if input_socket.name == "":  # there is always an unnamed placeholder socket, skip that b*
                 continue
-            outer_id = port_id_hash(wrapper_node.get("name"), f"{input_socket.as_pointer()}_WrapperOUT-Input")
-            inner_id = port_id_hash(inner_node.get("name"), f"{input_socket.as_pointer()}_InnerOUT-Output")
+            outer_id = port_id_hash(wrapper_node.name, f"{input_socket.as_pointer()}_WrapperOUT-Input")
+            inner_id = port_id_hash(inner_node.name, f"{input_socket.as_pointer()}_InnerOUT-Output")
             ET.SubElement(inner_output_node_element, "Port", name=input_socket.name+str(property_map_update(inner_property_map, input_socket.name)), direction="out", id=inner_id)
             ET.SubElement(wrapper_node_element, "Port", name=input_socket.name+str(property_map_update(outer_property_map, input_socket.name)), direction="in", id=outer_id)
             create_connection_element(wrapper_node_element.getparent(), inner_id, outer_id)
