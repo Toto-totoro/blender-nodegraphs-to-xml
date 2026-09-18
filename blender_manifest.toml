@@ -17,7 +17,7 @@
 schema_version = "1.0.0"
 
 id = "nodegraphs_to_xml"
-version = "1.1.0"
+version = "1.2.0"
 name = "nodegraphs-to-xml"
 tagline = "Exports a node-graph (material or nodegroup) into a serialized graph in XML."
 maintainer = "Tom Schäfer <tschaefer.acc@gmail.com>, Laurin von Bergmann"
@@ -27,12 +27,11 @@ website = "https://github.com/Toto-totoro/blender-nodegraphs-to-xml/"
 
 blender_version_min = "4.2.0"
 
-license = [
-  "SPDX:GPL-3.0-or-later",
-]
+license = ["SPDX:GPL-3.0-or-later"]
 
 wheels = [
-    "./wheels/lxml-6.1.1-cp313-cp313-win_amd64.whl",
-    "./wheels/lxml-6.1.1-cp313-cp313-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl",
-    "./wheels/lxml-6.1.1-cp313-cp313-macosx_10_13_universal2.whl"
+  "./wheels/lxml-6.1.1-cp313-cp313-win_amd64.whl",
+  "./wheels/lxml-6.1.1-cp313-cp313-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl",
+  "./wheels/lxml-6.1.1-cp313-cp313-macosx_10_13_universal2.whl",
 ]
+
