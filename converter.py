@@ -347,7 +347,7 @@ def convert_node_properties_to_xml(node, node_element, filter_unnecessary=None):
             node_element,
             "Constant",
             name="Value" + str(property_map_update(property_map, "Value")),
-            value=node.outputs,
+            value=str(node.outputs["Value"].default_value),
         )
 
     # need to iterate over keys and then retrieve to avoid blender errors
@@ -403,12 +403,12 @@ def convert_mathutils_vector_to_xml(item, item_name, parent_element, property_ma
     Converts each value of a vector property into its own constant.
     """
     try:
-        for i in enumerate(item):
+        for v in item:
             ET.SubElement(
                 parent_element,
                 "Constant",
                 name="Value" + str(property_map_update(property_map, "Value")),
-                value=item[i],
+                value=str(v),
             )
     except (TypeError, AttributeError) as e:
         raise TypeError(
@@ -421,18 +421,18 @@ def convert_mathutils_euler_to_xml(item, item_name, parent_element, property_map
     Converts each value of a euler property into its own constant.
     """
     try:
-        for i in enumerate(item):
+        for v in item:
             ET.SubElement(
                 parent_element,
                 "Constant",
                 name="Value" + str(property_map_update(property_map, "Value")),
-                value=item[i],
+                value=str(v),
             )
         ET.SubElement(
             parent_element,
             "Constant",
             name="Order" + str(property_map_update(property_map, "Order")),
-            value=item.order,
+            value=str(item.order),
         )
     except (TypeError, AttributeError) as e:
         raise TypeError(
@@ -628,7 +628,7 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                         ET.SubElement(
                             extracted_element,
                             "Constant",
-                            name=item.name,
+                            name="Value0",
                             value=str(item.default_value),
                         )
                         extracted_out_socket = ET.SubElement(
