@@ -481,7 +481,9 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                     # currently unsupported: Collection, Color, Image, Material, Object,
 
                     # Vector
-                    if isinstance(item.default_value, bpy.types.bpy_prop_array):
+                    if isinstance(
+                        item.default_value, bpy.types.bpy_prop_array
+                    ) or isinstance(item, bpy.types.NodeSocketVector):
                         item_element = ET.SubElement(
                             parent_element,
                             "Port",
@@ -532,7 +534,7 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                         )
 
                     # Rotation (Euler)
-                    elif isinstance(item.default_value, bpy.types.NodeSocketRotation):
+                    elif isinstance(item, bpy.types.NodeSocketRotation):
                         item_element = ET.SubElement(
                             parent_element,
                             "Port",
@@ -587,10 +589,11 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                             parent_element.getparent(), from_id, to_id
                         )
 
-                    elif isinstance(item.default_value, mathutils.Euler):
-                        convert_mathutils_euler_to_xml(
-                            item.default_value, item.name, parent_element, property_map
-                        )
+                    # doesn't seem needed rn
+                    # elif isinstance(item.default_value, mathutils.Euler):
+                    #     convert_mathutils_euler_to_xml(
+                    #         item.default_value, item.name, parent_element, property_map
+                    #     )
 
                     # bool, int, str, float
                     elif isinstance(item.default_value, (int, float, str, bool)):
