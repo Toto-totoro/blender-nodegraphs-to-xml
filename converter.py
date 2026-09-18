@@ -169,20 +169,21 @@ def convert_nodegroup_node_to_xml(node, parent_element, graph_id):
     # retrieve the inner input and output nodes of the node group in the xml representation
     # the nodes are generated into the xml seperately and by using the id and (normally) unique node names we can find them again
     #* sadly currently simplest way for this since global variables are a little tricky in blender
-    inner_input_node_element = parent_element.xpath(f"Graph[@id='{graph_id}']/Node[contains(@name, 'Group Input')]")
-    inner_output_node_element = parent_element.xpath(f"Graph[@id='{graph_id}']/Node[contains(@name, 'Group Output')]")
+    inner_input_node_elements = parent_element.xpath(f"Graph[@id='{graph_id}']/Node[@type='NodeGroupInput']")
+    inner_output_node_elements = parent_element.xpath(f"Graph[@id='{graph_id}']/Node[@type='NodeGroupOutput']")
 
-    if not inner_input_node_element:
-        raise Exception(f"Could not find group input node for node group {node.name} in graph id {graph_id}. It either doesn't exist in blender or hasn't been converted to xml yet.")
-    if not inner_output_node_element:
+    if not inner_input_node_elements:
+        raise Exception(f"Could not find a group input node for node group {node.name} in graph id {graph_id}. It either doesn't exist in blender or hasn't been converted to xml yet.")
+    if not inner_output_node_elements:
         raise Exception(f"Could not find group output node for node group {node.name} in graph id {graph_id}. It either doesn't exist in blender or hasn't been converted to xml yet.")
-    if len(inner_input_node_element) > 1:
-        print(f"Warning: Found multiple group input nodes for node group {node.name} in graph id {graph_id}. Only one should exist. Using the first one found.")
-    if len(inner_output_node_element) > 1:
-        print(f"Warning: Found multiple group output nodes for node group {node.name} in graph id {graph_id}. Only one should exist. Using the first one found.")
 
-    inner_input_node_element = inner_input_node_element[0]
-    inner_output_node_element = inner_output_node_element[0]
+    # only one output should exist, also check to find the one that is marked as active output (only one should be marked as such by blender)
+    if len(inner_output_node_elements) > 1:
+        print(f"Warning: Found multiple group output nodes for node group {node.name} in graph id {graph_id}. Only one should exist. Trying to find the correct one.")
+    # search for Constant is_active_output and check for true
+    inner_output_node_element = [n for n in inner_output_node_elements if n.xpath(".//Constant[@name='is_active_output0']") and n.xpath(".//Constant[@name='is_active_output0']")[0].get("value") == "True"][0] 
+    if inner_output_node_element is not None:
+        raise Exception(f"Could not find the ACTIVE group output node for node group {node.name} in graph id {graph_id}. It either doesn't exist in blender or hasn't been converted to xml yet.")
 
 
 
@@ -191,20 +192,21 @@ def convert_nodegroup_node_to_xml(node, parent_element, graph_id):
     wrapperIN_node_element = ET.SubElement(parent_element, "Node", name=node.name+'_WrapperIn', type=node.bl_idname+"Input")
     wrapperOUT_node_element = ET.SubElement(parent_element, "Node", name=node.name+'_WrapperOut', type=node.bl_idname+"Output")
 
-    inner_input_node = [n for n in node.node_tree.nodes if n.bl_idname == 'NodeGroupInput']
-    inner_output_node = [n for n in node.node_tree.nodes if n.bl_idname == 'NodeGroupOutput']
 
-    if not inner_input_node:
+
+    inner_input_nodes = [n for n in node.node_tree.nodes if n.bl_idname == 'NodeGroupInput']
+    inner_output_nodes = [n for n in node.node_tree.nodes if n.bl_idname == 'NodeGroupOutput']
+
+    # these checks are redundant, they do the same as above, if the nodes aren't found they should also be missing in the xml representation
+    if not inner_input_nodes:
         raise Exception(f"Could not find group input node for node group {node.name} in blender.")
-    if not inner_output_node:
+    if not inner_output_nodes:
         raise Exception(f"Could not find group output node for node group {node.name} in blender.")
-    if len(inner_input_node) > 1:
-        print(f"Warning: Found multiple group input nodes for node group {node.name} in graph {node.node_tree.name}. Only one should exist. Using the first one found.")
-    if len(inner_output_node) > 1:
-        print(f"Warning: Found multiple group output nodes for node group {node.name} in graph {node.node_tree.name}. Only one should exist. Using the first one found.")
-
-    inner_input_node = inner_input_node[0]
-    inner_output_node = inner_output_node[0]
+    if len(inner_output_nodes) > 1:
+        print(f"Warning: Found multiple group output nodes for node group {node.name} in graph {node.node_tree.name}. Only one should exist. Trying to find the correct one.")
+    inner_output_node = [ n for n in inner_output_nodes if n.is_active_output ][0]
+    if not inner_output_node:
+        raise Exception(f"Could not find the ACTIVE group output node for node group {node.name} in blender.")
 
 
 
@@ -259,7 +261,7 @@ def convert_nodegroup_node_to_xml(node, parent_element, graph_id):
 
     # route wrapper nodes to their inner counterparts
     # the ports simply traverse the nodes without any additional processing, so the inner node group can be used as a black box
-    connect_wrapperIN_to_innerIN(wrapperIN_node_element, inner_input_node_element, node, inner_input_node)
+    connect_wrapperIN_to_innerIN(wrapperIN_node_element, inner_input_node_elements, node, inner_input_nodes)
     connect_innerOUT_to_wrapperOUT(wrapperOUT_node_element, inner_output_node_element, node, inner_output_node)
 
 
@@ -516,20 +518,27 @@ def create_connection_element(parent_element, from_id, to_id):
     connection_element.set("from", from_id)
     connection_element.set("to", to_id)
 
-def connect_wrapperIN_to_innerIN(wrapper_node_element, inner_input_node_element, wrapper_node, inner_node):
+def connect_wrapperIN_to_innerIN(wrapper_node_element, inner_input_node_elements, wrapper_node, inner_nodes):
     """
-    Copys the output sockets of inner_input_node to wrapper_input_node outputs, duplicates them to the inputs of itself and connects them in the XML representation.
+    Copys the output sockets of inner_input_node to wrapper_input_node outputs, duplicates them to the inputs of itself and connects them in the XML representation. \n
+    1 to N relation, since multiple inner input nodes can exist.
     """
-    inner_property_map = {}
+    inner_property_maps = [{} for _ in inner_nodes]
     outer_property_map = {}
-    for output_socket in inner_node.outputs:
+    reference_node = inner_nodes[0]
+    for socket_index, output_socket in enumerate(reference_node.outputs):
             if output_socket.name == "":  # there is always an unnamed placeholder socket, skip that b*
                 continue
             outer_id = port_id_hash(wrapper_node.name, f"{output_socket.as_pointer()}_WrapperIn-Output")
-            inner_id = port_id_hash(inner_node.name, f"{output_socket.as_pointer()}_InnerIn-Input")
             ET.SubElement(wrapper_node_element, "Port", name=output_socket.name+str(property_map_update(outer_property_map, output_socket.name)), direction="out", id=outer_id)
-            ET.SubElement(inner_input_node_element, "Port", name=output_socket.name+str(property_map_update(inner_property_map, output_socket.name)), direction="in", id=inner_id)
-            create_connection_element(wrapper_node_element.getparent(), outer_id, inner_id)
+
+            for inner_node, inner_input_node_element, inner_property_map in zip(inner_nodes, inner_input_node_elements, inner_property_maps):
+
+                target_socket = inner_node.outputs[socket_index] # grab specific socket for unique pointer
+
+                inner_id = port_id_hash(inner_node.name, f"{target_socket.as_pointer()}_InnerIn-Input")
+                ET.SubElement(inner_input_node_element, "Port", name=target_socket.name+str(property_map_update(inner_property_map, target_socket.name)), direction="in", id=inner_id)
+                create_connection_element(wrapper_node_element.getparent(), outer_id, inner_id)
 
 
 def connect_innerOUT_to_wrapperOUT(wrapper_node_element, inner_output_node_element, wrapper_node, inner_node):
