@@ -16,13 +16,15 @@
 
 #! if you come across weridly looking code, most is intentional and sometimes a bit hacky, since blenders api design is not really consistent from older to newer features.
 
-from os import name
-
 import bpy
 import mathutils
 import hashlib
 import traceback
 from lxml import etree as ET
+
+
+class NodeConversionError(Exception):
+    """Raised when a node graph or node group fails to convert properly."""
 
 
 def convert_node_graphs_to_xml(node_graphs: list) -> str:
@@ -38,8 +40,13 @@ def convert_node_graphs_to_xml(node_graphs: list) -> str:
         try:
             graph_id = convert_node_graph_to_xml(node_graph, root, graph_id)
             graph_id += 1
+        except NodeConversionError as e:
+            print(f"Conversion error in node graph '{node_graph.name}': {e}")
+            traceback.print_exc()
         except Exception as e:
-            print(f"Error converting node graph {node_graph.name}: {e}")
+            print(
+                f"Unexpected system error converting node graph '{node_graph.name}': {e}"
+            )
             traceback.print_exc()
 
     return ET.tostring(root, pretty_print=True).decode()
@@ -80,8 +87,9 @@ def convert_node_graph_to_xml(node_graph, root, graph_id) -> int:
                         node, nodegroup_element, current_graph_id
                     )  #! needs to be called after inner node group is converted
                 except Exception as e:
-                    print(f"Error converting node group {node.name}")
-                    raise e
+                    raise NodeConversionError(
+                        f"Error converting node group {node.name}"
+                    ) from e
 
                 continue  # Skip the rest for node groups
             else:
@@ -191,11 +199,11 @@ def convert_nodegroup_node_to_xml(node, parent_element, graph_id):
     )
 
     if not inner_input_node_elements:
-        raise Exception(
+        raise LookupError(
             f"Could not find a group input node for node group {node.name} in graph id {graph_id}. It either doesn't exist in blender or hasn't been converted to xml yet."
         )
     if not inner_output_node_elements:
-        raise Exception(
+        raise LookupError(
             f"Could not find group output node for node group {node.name} in graph id {graph_id}. It either doesn't exist in blender or hasn't been converted to xml yet."
         )
 
@@ -205,14 +213,14 @@ def convert_nodegroup_node_to_xml(node, parent_element, graph_id):
             f"Warning: Found multiple group output nodes for node group {node.name} in graph id {graph_id}. Only one should exist. Trying to find the correct one."
         )
     # search for Constant is_active_output and check for true
-    inner_output_node_element = [
+    inner_output_node_element = next(
         n
         for n in inner_output_node_elements
         if n.xpath(".//Constant[@name='is_active_output0']")
         and n.xpath(".//Constant[@name='is_active_output0']")[0].get("value") == "True"
-    ][0]
-    if inner_output_node_element is not None:
-        raise Exception(
+    )
+    if inner_output_node_element is None:
+        raise LookupError(
             f"Could not find the ACTIVE group output node for node group {node.name} in graph id {graph_id}. It either doesn't exist in blender or hasn't been converted to xml yet."
         )
 
@@ -240,20 +248,20 @@ def convert_nodegroup_node_to_xml(node, parent_element, graph_id):
 
     # these checks are redundant, they do the same as above, if the nodes aren't found they should also be missing in the xml representation
     if not inner_input_nodes:
-        raise Exception(
+        raise LookupError(
             f"Could not find group input node for node group {node.name} in blender."
         )
     if not inner_output_nodes:
-        raise Exception(
+        raise LookupError(
             f"Could not find group output node for node group {node.name} in blender."
         )
     if len(inner_output_nodes) > 1:
         print(
             f"Warning: Found multiple group output nodes for node group {node.name} in graph {node.node_tree.name}. Only one should exist. Trying to find the correct one."
         )
-    inner_output_node = [n for n in inner_output_nodes if n.is_active_output][0]
+    inner_output_node = next(n for n in inner_output_nodes if n.is_active_output)
     if not inner_output_node:
-        raise Exception(
+        raise LookupError(
             f"Could not find the ACTIVE group output node for node group {node.name} in blender."
         )
 
@@ -402,8 +410,8 @@ def convert_mathutils_vector_to_xml(item, item_name, parent_element, property_ma
                 name="Value" + str(property_map_update(property_map, "Value")),
                 value=item[i],
             )
-    except Exception as e:
-        raise Exception(
+    except (TypeError, AttributeError) as e:
+        raise TypeError(
             f"{item_name}: {type(item)} | in (parent node: {parent_element.get('name')}, property: {item_name}) is either not a mathutils.Vector or broken."
         ) from e
 
@@ -426,9 +434,9 @@ def convert_mathutils_euler_to_xml(item, item_name, parent_element, property_map
             name="Order" + str(property_map_update(property_map, "Order")),
             value=item.order,
         )
-    except Exception as e:
-        raise Exception(
-            f"{item_name}: {type(item)} | in (parent node: {parent_element.get('name')}, property: {item_name}) is either not a mathutils.Vector or broken."
+    except (TypeError, AttributeError) as e:
+        raise TypeError(
+            f"{item_name}: {type(item)} | in (parent node: {parent_element.get('name')}, property: {item_name}) is either not a mathutils.Euler or broken."
         ) from e
 
 
@@ -645,11 +653,10 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                             f"value: {item.default_value}, type: {type(item.default_value)} | is an unsupported type in bpy_prop_collection: (parent node: {parent_element.get('name')}, porperty: {prop_name})"
                         )
 
-    except Exception as e:
-        print(
-            f"{prop_name}: {type(prop)} | is not a bpy.types.bpy_prop_collection or some of its items are broken: {e}"
-        )
-        traceback.print_exc()
+    except TypeError as e:
+        raise TypeError(
+            f"{prop_name}: {type(prop)} | is not a bpy.types.bpy_prop_collection or some of its items are broken."
+        ) from e
 
 
 # * ColorMapping has item ColorRamp, which is a collection (of ColorRampElements); needs special handling, not imlemented yet (only for Shader Nodes, since ColorMapping is not used in Geometry Nodes afaik)
