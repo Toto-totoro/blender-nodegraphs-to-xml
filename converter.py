@@ -343,7 +343,7 @@ def convert_mathutils_vector_to_xml(item, item_name, parent_element, property_ma
             ET.SubElement(extracted_vector_element, "Constant", name="Value"+str(vec_value_counter), value=str(i))
             vec_value_counter += 1
 
-        extracted_vector_element_outsocket = ET.SubElement(extracted_vector_element, "Port", name="vectorOut", direction="out", id=port_id_hash(parent_element.get("name"), f"{pseudo_pointer}vectorOut"))
+        extracted_vector_element_outsocket = ET.SubElement(extracted_vector_element, "Port", name="Vector0", direction="out", id=port_id_hash(parent_element.get("name"), f"{pseudo_pointer}vectorOut"))
 
         from_id = extracted_vector_element_outsocket.get("id")
         to_id = item_element.get('id')
@@ -370,7 +370,7 @@ def convert_mathutils_euler_to_xml(item, item_name, parent_element, property_map
             ET.SubElement(extracted_vector_element, "Constant", name="Value"+str(vec_value_counter), value=str(i))
             vec_value_counter += 1
         ET.SubElement(extracted_vector_element, "Constant", name="Order"+"0", value=str(item.order))
-        extracted_vector_element_outsocket = ET.SubElement(extracted_vector_element, "Port", name="vectorOut", direction="out", id=port_id_hash(parent_element.get("name"), f"{pseudo_pointer}vectorOut"))
+        extracted_vector_element_outsocket = ET.SubElement(extracted_vector_element, "Port", name="Rotation0", direction="out", id=port_id_hash(parent_element.get("name"), f"{pseudo_pointer}vectorOut"))
 
         from_id = extracted_vector_element_outsocket.get("id")
         to_id = item_element.get('id')
@@ -427,7 +427,7 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                         for i in range(item.default_value.__len__()):
                             ET.SubElement(extracted_vector_element, "Constant", name="Value"+str(vec_value_counter), value=str(item.default_value[i]))
                             vec_value_counter += 1
-                        extracted_vec_out_socket = ET.SubElement(extracted_vector_element, "Port", name="vectorOut", direction="out", id=port_id_hash(parent_element.get("name"), f"{item.as_pointer()}vectorOut"))
+                        extracted_vec_out_socket = ET.SubElement(extracted_vector_element, "Port", name="Vector0", direction="out", id=port_id_hash(parent_element.get("name"), f"{item.as_pointer()}vectorOut"))
 
                         from_id = extracted_vec_out_socket.get("id")
                         to_id = item_element.get('id')
@@ -443,7 +443,7 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                             ET.SubElement(extracted_vector_element, "Constant", name="Value"+str(vec_value_counter), value=str(i))
                             vec_value_counter += 1
                         ET.SubElement(extracted_vector_element, "Constant", name="Order"+"0", value=str(item.default_value.order))
-                        extracted_vec_out_socket = ET.SubElement(extracted_vector_element, "Port", name="vectorOut", direction="out", id=port_id_hash(parent_element.get("name"), f"{item.as_pointer()}vectorOut"))
+                        extracted_vec_out_socket = ET.SubElement(extracted_vector_element, "Port", name="Rotation0", direction="out", id=port_id_hash(parent_element.get("name"), f"{item.as_pointer()}vectorOut"))
 
                         from_id = extracted_vec_out_socket.get("id")
                         to_id = item_element.get('id')
@@ -465,7 +465,7 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
 
                         extracted_element = ET.SubElement(parent_element.getparent(), "Node", name=item.name+"_"+port_id_hash(parent_element.get("name"), f"{item.as_pointer()}valueOut"), type=type_to_node.get(type(item.default_value), "ShaderNodeValue"))
                         ET.SubElement(extracted_element, "Constant", name=item.name, value=str(item.default_value))
-                        extracted_out_socket = ET.SubElement(extracted_element, "Port", name="Value", direction="out", id=port_id_hash(parent_element.get("name"), f"{item.as_pointer()}valueOut"))
+                        extracted_out_socket = ET.SubElement(extracted_element, "Port", name="Value0", direction="out", id=port_id_hash(parent_element.get("name"), f"{item.as_pointer()}valueOut"))
 
                         from_id = extracted_out_socket.get("id")
                         to_id = item_element.get('id')
