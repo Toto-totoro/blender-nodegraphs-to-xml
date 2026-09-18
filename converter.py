@@ -176,14 +176,14 @@ def convert_nodegroup_node_to_xml(node, parent_element, graph_id):
         raise Exception(f"Could not find group input node for node group {node.name} in graph id {graph_id}. It either doesn't exist in blender or hasn't been converted to xml yet.")
     if not inner_output_node_element:
         raise Exception(f"Could not find group output node for node group {node.name} in graph id {graph_id}. It either doesn't exist in blender or hasn't been converted to xml yet.")
-
     if len(inner_input_node_element) > 1:
-        raise Exception(f"Found multiple group input nodes for node group {node.name} in graph id {graph_id}. Only one should exist.")
+        print(f"Warning: Found multiple group input nodes for node group {node.name} in graph id {graph_id}. Only one should exist. Using the first one found.")
     if len(inner_output_node_element) > 1:
-        raise Exception(f"Found multiple group output nodes for node group {node.name} in graph id {graph_id}. Only one should exist.")
+        print(f"Warning: Found multiple group output nodes for node group {node.name} in graph id {graph_id}. Only one should exist. Using the first one found.")
 
     inner_input_node_element = inner_input_node_element[0]
     inner_output_node_element = inner_output_node_element[0]
+
 
 
     # split nodegroup node in 2 to wrap the inner node graph
@@ -191,9 +191,22 @@ def convert_nodegroup_node_to_xml(node, parent_element, graph_id):
     wrapperIN_node_element = ET.SubElement(parent_element, "Node", name=node.name+'_WrapperIn', type=node.bl_idname+"Input")
     wrapperOUT_node_element = ET.SubElement(parent_element, "Node", name=node.name+'_WrapperOut', type=node.bl_idname+"Output")
 
+    inner_input_node = [n for n in node.node_tree.nodes if n.bl_idname == 'NodeGroupInput']
+    inner_output_node = [n for n in node.node_tree.nodes if n.bl_idname == 'NodeGroupOutput']
 
-    inner_input_node = node.node_tree.nodes.get('Group Input')
-    inner_output_node = node.node_tree.nodes.get('Group Output')
+    if not inner_input_node:
+        raise Exception(f"Could not find group input node for node group {node.name} in blender.")
+    if not inner_output_node:
+        raise Exception(f"Could not find group output node for node group {node.name} in blender.")
+    if len(inner_input_node) > 1:
+        print(f"Warning: Found multiple group input nodes for node group {node.name} in graph {node.node_tree.name}. Only one should exist. Using the first one found.")
+    if len(inner_output_node) > 1:
+        print(f"Warning: Found multiple group output nodes for node group {node.name} in graph {node.node_tree.name}. Only one should exist. Using the first one found.")
+
+    inner_input_node = inner_input_node[0]
+    inner_output_node = inner_output_node[0]
+
+
 
     # generate wrapper input, filter out outputs to add custom routing to the inner node group
     filter_for_input_node = {
@@ -235,8 +248,8 @@ def convert_nodegroup_node_to_xml(node, parent_element, graph_id):
                     'texture_mapping',
                     'color_mapping',
             
-                    'node_tree',
-                    'outputs'
+                    'node_tree', #special
+                    'outputs' #special
                     }
     convert_node_properties_to_xml(node, wrapperIN_node_element, filter_for_input_node)
 
@@ -335,8 +348,7 @@ def convert_mathutils_vector_to_xml(item, item_name, parent_element, property_ma
         create_connection_element(parent_element.getparent(), from_id, to_id)
 
     except Exception as e:
-        print(f"{item_name}: {type(item)} | in (parent node: {parent_element.get('name')}, property: {item_name}) is either not a mathutils.Vector or broken: {e}")
-        traceback.print_exc()
+        raise Exception(f"{item_name}: {type(item)} | in (parent node: {parent_element.get('name')}, property: {item_name}) is either not a mathutils.Vector or broken.") from e
 
 
 
@@ -363,8 +375,7 @@ def convert_mathutils_euler_to_xml(item, item_name, parent_element, property_map
         create_connection_element(parent_element.getparent(), from_id, to_id)
 
     except Exception as e:
-        print(f"{item_name}: {type(item)} | in (parent node: {parent_element.get('name')}, property: {item_name}) is either not a mathutils.Euler or broken: {e}")
-        traceback.print_exc()
+        raise Exception(f"{item_name}: {type(item)} | in (parent node: {parent_element.get('name')}, property: {item_name}) is either not a mathutils.Euler or broken.") from e
 
 
 def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map):
