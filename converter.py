@@ -32,7 +32,7 @@ def convert_node_graphs_to_xml(node_graphs: list) -> str:
     Converts a list of Blender node groups into a serialized XML string representation with lxml etree.
     """
     # root element
-    root = ET.Element("BlenderNodeGraphs")
+    root = ET.Element("BlenderNodeGraphs", exporter="RNA", version="1.3")
 
     # * this stupid way of id generation is used because blender does not allow easy use of global variables
     graph_id = 0

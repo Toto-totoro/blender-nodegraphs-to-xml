@@ -17,7 +17,7 @@
 schema_version = "1.0.0"
 
 id = "nodegraphs_to_xml"
-version = "1.2.1"
+version = "1.3.0"
 name = "nodegraphs-to-xml"
 tagline = "Exports a node-graph (material or nodegroup) into a serialized graph in XML."
 maintainer = "Tom Schäfer <tschaefer.acc@gmail.com>, Laurin von Bergmann"
