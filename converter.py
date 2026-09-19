@@ -346,6 +346,7 @@ def convert_node_properties_to_xml(node, node_element, filter_unnecessary=None):
             "Constant",
             name="Value" + str(property_map_update(property_map, "Value")),
             value=str(node.outputs["Value"].default_value),
+            type="VALUE",
         )
 
     # need to iterate over keys and then retrieve to avoid blender errors
@@ -467,6 +468,7 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                     "Port",
                     name=item.name + str(property_map_update(property_map, item.name)),
                     direction="out" if item.is_output else "in",
+                    type=item.type,
                     id=port_id_hash(parent_element.get("name"), item.as_pointer()),
                 )
 
