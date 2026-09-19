@@ -485,7 +485,12 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                     if isinstance(
                         item.default_value, (bpy.types.bpy_prop_array)
                     ) or isinstance(
-                        item, (bpy.types.NodeSocketVector, bpy.types.NodeSocketRotation)
+                        item,
+                        (
+                            bpy.types.NodeSocketVector,
+                            bpy.types.NodeSocketRotation,
+                            bpy.types.NodeSocketVectorEuler,
+                        ),
                     ):
                         extract_input_vector(item, parent_element, property_map)
 
@@ -566,7 +571,9 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
 
 
 def extract_input_vector(item, parent_element, property_map):
-    is_rotation = isinstance(item, bpy.types.NodeSocketRotation)
+    is_rotation = isinstance(
+        item, (bpy.types.NodeSocketRotation, bpy.types.NodeSocketVectorEuler)
+    )
 
     item_element = ET.SubElement(
         parent_element,
