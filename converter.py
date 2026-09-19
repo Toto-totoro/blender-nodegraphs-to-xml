@@ -685,6 +685,7 @@ def connect_wrapperIN_to_innerIN(
             name=output_socket.name
             + str(property_map_update(outer_property_map, output_socket.name)),
             direction="out",
+            type=output_socket.type,
             id=outer_id,
         )
 
@@ -704,6 +705,7 @@ def connect_wrapperIN_to_innerIN(
                 name=target_socket.name
                 + str(property_map_update(inner_property_map, target_socket.name)),
                 direction="in",
+                type=target_socket.type,
                 id=inner_id,
             )
             create_connection_element(
@@ -736,6 +738,7 @@ def connect_innerOUT_to_wrapperOUT(
             name=input_socket.name
             + str(property_map_update(inner_property_map, input_socket.name)),
             direction="out",
+            type=input_socket.type,
             id=inner_id,
         )
         ET.SubElement(
@@ -744,6 +747,7 @@ def connect_innerOUT_to_wrapperOUT(
             name=input_socket.name
             + str(property_map_update(outer_property_map, input_socket.name)),
             direction="in",
+            type=input_socket.type,
             id=outer_id,
         )
         create_connection_element(wrapper_node_element.getparent(), inner_id, outer_id)
