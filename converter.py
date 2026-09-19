@@ -34,6 +34,8 @@ def convert_node_graphs_to_xml(node_graphs: list) -> str:
     # root element
     root = ET.Element("BlenderNodeGraphs", exporter="RNA", version="1.3")
 
+    diagnostics_element = ET.SubElement(root, "Diagnostics")
+
     # * this stupid way of id generation is used because blender does not allow easy use of global variables
     graph_id = 0
     for node_graph in node_graphs:
@@ -43,11 +45,28 @@ def convert_node_graphs_to_xml(node_graphs: list) -> str:
         except NodeConversionError as e:
             print(f"Conversion error in node graph '{node_graph.name}': {e}")
             traceback.print_exc()
+            error_element = ET.SubElement(
+                diagnostics_element,
+                "Error",
+                type=e.__class__.__name__,
+                graph=node_graph.name,
+            )
+            error_element.text = str(e)
         except Exception as e:
             print(
                 f"Unexpected system error converting node graph '{node_graph.name}': {e}"
             )
             traceback.print_exc()
+            error_element = ET.SubElement(
+                diagnostics_element,
+                "Error",
+                type=e.__class__.__name__,
+                graph=node_graph.name,
+            )
+            error_element.text = str(e)
+
+    if len(diagnostics_element) == 0:
+        root.remove(diagnostics_element)
 
     return ET.tostring(root, pretty_print=True).decode()
 
