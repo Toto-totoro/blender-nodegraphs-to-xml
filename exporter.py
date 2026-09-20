@@ -17,7 +17,7 @@
 
 import bpy
 from bpy_extras.io_utils import ExportHelper
-from bpy.props import StringProperty, BoolProperty
+from bpy.props import StringProperty, BoolProperty, EnumProperty
 from bpy.types import Operator
 from .converter import convert_node_graphs_to_xml
 
@@ -86,11 +86,27 @@ class ExportNodeGroupsExecutor(bpy.types.Operator, ExportHelper):
     bl_label = "Export Node Groups"
     filename_ext = ".xml"
 
+    export_type: EnumProperty(
+        name="Exportverfahren",
+        description="Wähle das Exportverfahren aus",
+        items=[
+            ('RNA', "RNA", "Standard RNA Export"),
+            ('FAST', "FAST", "Schnelles Exportverfahren (In Entwicklung)"),
+        ],
+        default='RNA',
+    )
+
     # Executes the export process for the selected node groups
     def execute(self, context):
         target_filepath = self.filepath
         node_groups_to_export = [item for item in bpy.data.node_groups if item.export]
-        xml_string = convert_node_graphs_to_xml(node_groups_to_export)
+
+        if self.export_type == 'RNA':
+            xml_string = convert_node_graphs_to_xml(node_groups_to_export)
+        elif self.export_type == 'FAST':
+            raise NotImplementedError("FAST export mechanism is not implemented yet.")
+        else:
+            raise Exception(f"Unknown export type: {self.export_type}")
 
         # Generates XML file, stores XML string into generated file,saves it in specified location
         with open(target_filepath, 'w', encoding='utf-8') as file:
@@ -164,11 +180,27 @@ class ExportMaterialsExecutor(bpy.types.Operator, ExportHelper):
     bl_label = "Export Materials"
     filename_ext = ".xml"
 
+    export_type: EnumProperty(
+        name="Exportverfahren",
+        description="Wähle das Exportverfahren aus",
+        items=[
+            ('RNA', "RNA", "Standard RNA Export"),
+            ('FAST', "FAST", "Schnelles Exportverfahren (In Entwicklung)"),
+        ],
+        default='RNA',
+    )
+
     # Executes the export process for the selected materials
     def execute(self, context):
         target_filepath = self.filepath
         materials_to_export = [item for item in bpy.data.materials if item.export]
-        xml_string = convert_node_graphs_to_xml(materials_to_export)
+
+        if self.export_type == 'RNA':
+            xml_string = convert_node_graphs_to_xml(materials_to_export)
+        elif self.export_type == 'FAST':
+            raise NotImplementedError("FAST export mechanism is not implemented yet.")
+        else:
+            raise Exception(f"Unknown export type: {self.export_type}")
 
         # Generates XML file, stores XML string into generated file,saves it in specified location
         with open(target_filepath, 'w', encoding='utf-8') as file:
