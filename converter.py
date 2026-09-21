@@ -565,7 +565,7 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                         extracted_out_socket = ET.SubElement(
                             extracted_element,
                             "Port",
-                            name="Value0",
+                            name="Value1",
                             direction="out",
                             type=item.type,
                             id=port_id_hash(
