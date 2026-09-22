@@ -549,7 +549,7 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                             + "_"
                             + port_id_hash(
                                 parent_element.get("name"),
-                                f"{item.as_pointer()}valueOut",
+                                item.as_pointer(),
                             ),
                             type=type_to_node.get(
                                 type(item.default_value), "ShaderNodeValue"
@@ -558,14 +558,16 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                         ET.SubElement(
                             extracted_element,
                             "Constant",
-                            name="Value0",
+                            name="Value"
+                            + str(port_id_hash(extracted_element.get("name"), "Value")),
                             value=str(item.default_value),
                             type=item.type,
                         )
                         extracted_out_socket = ET.SubElement(
                             extracted_element,
                             "Port",
-                            name="Value1",
+                            name="Value"
+                            + str(port_id_hash(extracted_element.get("name"), "Value")),
                             direction="out",
                             type=item.type,
                             id=port_id_hash(
@@ -612,7 +614,7 @@ def extract_input_vector(item, parent_element, property_map):
         + "_"
         + port_id_hash(
             parent_element.get("name"),
-            f"{item.as_pointer()}vectorOut",
+            item.as_pointer(),
         ),
         type="FunctionNodeInputRotation" if is_rotation else "FunctionNodeInputVector",
     )
