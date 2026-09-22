@@ -163,7 +163,7 @@ class GeometryNodeSerializer:
         self.e = parent_elem
         self.e = olde
 
-def export_graphs_fast(node_graphs: list):
+def export_graphs_fast(node_graphs: list) -> str:
     root = ET.Element(
         "BlenderNodeGraphs",
         exporter = "FAST",
@@ -175,5 +175,5 @@ def export_graphs_fast(node_graphs: list):
         s = GeometryNodeSerializer(root)
         s.handle_node_group(ng)
     
-    return root
+    return ET.tostring(root, pretty_print=True).decode()
     #print(ET.tostring(root, pretty_print=True).decode())
