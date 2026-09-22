@@ -165,7 +165,7 @@ class GeometryNodeSerializer:
 
 def export_graphs_fast(node_graphs: list):
     root = ET.Element(
-        "BlenderNodeGraphs"
+        "BlenderNodeGraphs",
         exporter = "FAST",
         version = "0.1",
     )
