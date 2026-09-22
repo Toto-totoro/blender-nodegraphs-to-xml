@@ -20,6 +20,7 @@ from bpy_extras.io_utils import ExportHelper
 from bpy.props import StringProperty, BoolProperty, EnumProperty
 from bpy.types import Operator
 from .converter import convert_node_graphs_to_xml
+from .fast_converter import export_graphs_fast
 
 ###############
 # Node Groups #
@@ -104,7 +105,7 @@ class ExportNodeGroupsExecutor(bpy.types.Operator, ExportHelper):
         if self.export_type == 'RNA':
             xml_string = convert_node_graphs_to_xml(node_groups_to_export)
         elif self.export_type == 'FAST':
-            raise NotImplementedError("FAST export mechanism is not implemented yet.")
+            xml_string = export_graphs_fast(node_groups_to_export)
         else:
             raise Exception(f"Unknown export type: {self.export_type}")
 
