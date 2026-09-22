@@ -20,6 +20,7 @@ from bpy_extras.io_utils import ExportHelper
 from bpy.props import StringProperty, BoolProperty, EnumProperty
 from bpy.types import Operator
 from .converter import convert_node_graphs_to_xml
+from .fast_converter import export_graphs_fast
 
 ###############
 # Node Groups #
