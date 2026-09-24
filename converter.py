@@ -100,12 +100,13 @@ def convert_node_graph_to_xml(node_graph, root, graph_id) -> int:
                     graph_id = convert_node_graph_to_xml(
                         node.node_tree, nodegroup_element, graph_id
                     )
+                    #! needs to be called after inner node group is converted
                     convert_nodegroup_node_to_xml(
                         node, nodegroup_element, current_graph_id
-                    )  #! needs to be called after inner node group is converted
+                    )
                 except Exception as e:
                     raise NodeConversionError(
-                        f"Error converting node group {node.name}"
+                        f"Error converting node group '{node.name}'"
                     ) from e
 
                 continue  # Skip the rest for node groups
@@ -143,14 +144,12 @@ def convert_node_graph_to_xml(node_graph, root, graph_id) -> int:
             "bl_height_default",
             "bl_height_min",
             "bl_height_max",
-            # these are currently filtered out by isinstance checking anyway lol
             "rna_type",
             "location",
             "location_absolute",
             "dimensions",
-            "parent",  # TODO: might be useful, don't know, investigate
+            "parent",
             "color",
-            # TODO: verify if these are needed
             "texture_mapping",
             "color_mapping",
             "node_tree",  # handled elsewhere
@@ -178,8 +177,8 @@ def convert_node_graph_to_xml(node_graph, root, graph_id) -> int:
         if link.to_node.type == "GROUP":
             to_node_name += "_WrapperIn"
 
-        from_id = port_id_hash(from_node_name, link.from_socket.as_pointer())
-        to_id = port_id_hash(to_node_name, link.to_socket.as_pointer())
+        from_id = port_id_hash(from_node_name, link.from_socket)
+        to_id = port_id_hash(to_node_name, link.to_socket)
         create_connection_element(nodegroup_element, from_id, to_id)
 
     return graph_id
@@ -190,7 +189,6 @@ def convert_node_graph_to_xml(node_graph, root, graph_id) -> int:
 ########################################################
 
 
-#! this might fail to work correctly if the inner node group has more than one input or output node (which shouldn't be the case)
 def convert_nodegroup_node_to_xml(node, parent_element, graph_id):
     """
     This function should always be called after the inner node group has been converted to xml \n
@@ -207,7 +205,7 @@ def convert_nodegroup_node_to_xml(node, parent_element, graph_id):
 
     # retrieve the inner input and output nodes of the node group in the xml representation
     # the nodes are generated into the xml seperately and by using the id and (normally) unique node names we can find them again
-    # * sadly currently simplest way for this since global variables are a little tricky in blender
+    # * currently simplest way for this, alternative would be: register new global map variable in blender -> safe mapped references to nodes -> retrieve here
     inner_input_node_elements = parent_element.xpath(
         f"Graph[@id='{graph_id}']/Node[@type='NodeGroupInput']"
     )
@@ -358,7 +356,7 @@ def convert_node_properties_to_xml(node, node_element, filter_unnecessary=None):
         _value = node.outputs["Value"].default_value
         if _value is None:
             raise AttributeError(
-                f"Node [name: {node.name}, type: {node.type}] is missing expected attribute outputs['Value'].default_value"
+                f"Node (name: {node.name}, type: {node.type}) is missing expected attribute outputs['Value'].default_value"
             )
         ET.SubElement(
             node_element,
@@ -376,8 +374,8 @@ def convert_node_properties_to_xml(node, node_element, filter_unnecessary=None):
         prop = getattr(node, prop_name)
 
         # * handle new property types here
-        # currently unsupported: TexMapping, ColorMapping, mathutils.Euler
-        # probably only need to implement new ones if you use custom properties
+        # currently unsupported: TexMapping, ColorMapping
+        # probably only need to implement new ones if you use custom properties or Shader Nodes
 
         # collection properties (inputs, outputs)
         if isinstance(prop, bpy.types.bpy_prop_collection):
@@ -400,7 +398,7 @@ def convert_node_properties_to_xml(node, node_element, filter_unnecessary=None):
             )
 
         # mapping properties (TexMapping, ColorMapping)
-        # * Currently deemed not needed
+        # * Currently deemed not needed, is used for Shader Nodes
         # elif isinstance(prop, bpy.types.TexMapping) or isinstance(prop, bpy.types.ColorMapping):
         #    convert_bpy_mapping_to_xml(prop, prop_name, node_element)
 
@@ -416,8 +414,9 @@ def convert_node_properties_to_xml(node, node_element, filter_unnecessary=None):
             continue  # Skip node_tree properties, handled recursively in `convert_node_graph_to_xml()`
 
         else:
+            # this is not necessarily an error, rather an info for future developement, therefore no error is raised to not stop xml generation
             print(
-                f"Unsupported property type for {prop_name} in node {node.name}: {type(prop)}"
+                f"Warning: Unsupported property type for {prop_name} in node {node.name}: {type(prop)}"
             )
 
     return property_map
@@ -488,7 +487,7 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                     name=item.name + str(property_map_update(property_map, item.name)),
                     direction="out" if item.is_output else "in",
                     type=item.type,
-                    id=port_id_hash(parent_element.get("name"), item.as_pointer()),
+                    id=port_id_hash(parent_element.get("name"), item),
                 )
 
             # extract unlinked input item into new node
@@ -511,12 +510,6 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                     ):
                         extract_input_vector(item, parent_element, property_map)
 
-                    # doesn't seem needed rn
-                    # elif isinstance(item.default_value, mathutils.Euler):
-                    #     convert_mathutils_euler_to_xml(
-                    #         item.default_value, item.name, parent_element, property_map
-                    #     )
-
                     # bool, int, str, float
                     elif isinstance(item.default_value, (int, float, str, bool)):
                         item_element = ET.SubElement(
@@ -526,9 +519,7 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                             + str(property_map_update(property_map, item.name)),
                             direction="in",
                             type=item.type,
-                            id=port_id_hash(
-                                parent_element.get("name"), item.as_pointer()
-                            ),
+                            id=port_id_hash(parent_element.get("name"), item),
                         )
 
                         type_to_node = {
@@ -545,7 +536,7 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                             + "_"
                             + port_id_hash(
                                 parent_element.get("name"),
-                                item.as_pointer(),
+                                item,
                             ),
                             type=type_to_node.get(
                                 type(item.default_value), "ShaderNodeValue"
@@ -554,21 +545,20 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                         ET.SubElement(
                             extracted_element,
                             "Constant",
-                            name="Value"
-                            + str(port_id_hash(extracted_element.get("name"), "Value")),
+                            name="Value0",
                             value=str(item.default_value),
                             type=item.type,
                         )
                         extracted_out_socket = ET.SubElement(
                             extracted_element,
                             "Port",
-                            name="Value"
-                            + str(port_id_hash(extracted_element.get("name"), "Value")),
+                            name="Value1",
                             direction="out",
                             type=item.type,
                             id=port_id_hash(
                                 parent_element.get("name"),
-                                f"{item.as_pointer()}valueOut",
+                                item,
+                                "valueOut",
                             ),
                         )
 
@@ -579,11 +569,18 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                         )
 
                     else:
+                        # this is not necessarily an error, rather an info for future developement, therefore no error is raised to not stop xml generation
                         print(
-                            f"value: {item.default_value}, type: {type(item.default_value)} | is an unsupported type in bpy_prop_collection: (parent node: {parent_element.get('name')}, porperty: {prop_name})"
+                            f"Warning: Value: {item.default_value}, type: {type(item.default_value)} | is an unsupported type in bpy_prop_collection: (parent node: {parent_element.get('name')}, porperty: {prop_name}, item: {item.name})"
                         )
 
-    except TypeError as e:
+                # this always throws even when unintended, need filter for allowed instances
+                # else:
+                #     raise AttributeError(
+                #         f"Item: {item.name} | is missing expected property 'default_value' in (parent node: {parent_element.get('name')}, property: {prop_name})"
+                #     )
+
+    except (AttributeError, TypeError) as e:
         raise TypeError(
             f"{prop_name}: {type(prop)} | is not a bpy.types.bpy_prop_collection or some of its items are broken."
         ) from e
@@ -600,18 +597,13 @@ def extract_input_vector(item, parent_element, property_map):
         name=item.name + str(property_map_update(property_map, item.name)),
         direction="in",
         type=item.type,
-        id=port_id_hash(parent_element.get("name"), item.as_pointer()),
+        id=port_id_hash(parent_element.get("name"), item),
     )
 
     extracted_vector_element = ET.SubElement(
         parent_element.getparent(),
         "Node",
-        name=item.name
-        + "_"
-        + port_id_hash(
-            parent_element.get("name"),
-            item.as_pointer(),
-        ),
+        name=item.name + "_" + port_id_hash(parent_element.get("name"), item),
         type="FunctionNodeInputRotation" if is_rotation else "FunctionNodeInputVector",
     )
     vec = item.default_value.to_quaternion() if is_rotation else item.default_value
@@ -630,10 +622,7 @@ def extract_input_vector(item, parent_element, property_map):
         name="Rotation0" if is_rotation else "Vector0",
         direction="out",
         type=item.type,
-        id=port_id_hash(
-            parent_element.get("name"),
-            f"{item.as_pointer()}vectorOut",
-        ),
+        id=port_id_hash(parent_element.get("name"), item, "vectorOut"),
     )
 
     from_id = extracted_vec_out_socket.get("id")
@@ -664,11 +653,12 @@ def extract_input_vector(item, parent_element, property_map):
 #############################
 
 
-def port_id_hash(parent_name, item_pointer):
+def port_id_hash(parent_name, blender_item=None, additional=""):
     """
     sha1 hash of the parent node name and the pointer of the port item, used to generate globally unique ids for ports in the XML representation.
     """
-    return hashlib.sha1(f"{parent_name}{item_pointer}".encode()).hexdigest()
+    pointer = "" if blender_item is None else blender_item.as_pointer()
+    return hashlib.sha1(f"{parent_name}{pointer}{additional}".encode()).hexdigest()
 
 
 def create_connection_element(parent_element, from_id, to_id):
@@ -695,9 +685,7 @@ def connect_wrapperIN_to_innerIN(
             output_socket.name == ""
         ):  # there is always an unnamed placeholder socket, skip that b*
             continue
-        outer_id = port_id_hash(
-            wrapper_node.name, f"{output_socket.as_pointer()}_WrapperIn-Output"
-        )
+        outer_id = port_id_hash(wrapper_node.name, output_socket, "_WrapperIn-Output")
         ET.SubElement(
             wrapper_node_element,
             "Port",
@@ -715,9 +703,7 @@ def connect_wrapperIN_to_innerIN(
                 socket_index
             ]  # grab specific socket for unique pointer
 
-            inner_id = port_id_hash(
-                inner_node.name, f"{target_socket.as_pointer()}_InnerIn-Input"
-            )
+            inner_id = port_id_hash(inner_node.name, target_socket, "_InnerIn-Input")
             ET.SubElement(
                 inner_input_node_element,
                 "Port",
@@ -745,12 +731,8 @@ def connect_innerOUT_to_wrapperOUT(
             input_socket.name == ""
         ):  # there is always an unnamed placeholder socket, skip that b*
             continue
-        outer_id = port_id_hash(
-            wrapper_node.name, f"{input_socket.as_pointer()}_WrapperOUT-Input"
-        )
-        inner_id = port_id_hash(
-            inner_node.name, f"{input_socket.as_pointer()}_InnerOUT-Output"
-        )
+        outer_id = port_id_hash(wrapper_node.name, input_socket, "_WrapperOUT-Input")
+        inner_id = port_id_hash(inner_node.name, input_socket, "_InnerOUT-Output")
         ET.SubElement(
             inner_output_node_element,
             "Port",
