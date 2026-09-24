@@ -481,7 +481,7 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
             if item is None:
                 continue
 
-            if item.is_linked:
+            if item.is_linked or item.is_output:
                 item_element = ET.SubElement(
                     parent_element,
                     "Port",
@@ -493,10 +493,6 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
 
             # extract unlinked input item into new node
             else:
-                # Skip unlinked output items
-                if item.is_output:
-                    continue
-
                 if hasattr(item, "default_value"):
                     # * handle new datatypes for inputs/ouputs here
                     # currently supported: Vector (bpy_prop_array), bool, int, str, Value (float)
