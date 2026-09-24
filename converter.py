@@ -106,7 +106,7 @@ def convert_node_graph_to_xml(node_graph, root, graph_id) -> int:
                     )
                 except Exception as e:
                     raise NodeConversionError(
-                        f"Error converting node group {node.name}"
+                        f"Error converting node group '{node.name}'"
                     ) from e
 
                 continue  # Skip the rest for node groups
@@ -574,10 +574,11 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                             f"Warning: Value: {item.default_value}, type: {type(item.default_value)} | is an unsupported type in bpy_prop_collection: (parent node: {parent_element.get('name')}, porperty: {prop_name}, item: {item.name})"
                         )
 
-                else:
-                    raise AttributeError(
-                        f"Item: {item.name} | is missing expected property 'default_value' in (parent node: {parent_element.get('name')}, property: {prop_name})"
-                    )
+                # this always throws even when unintended, need filter for allowed instances
+                # else:
+                #     raise AttributeError(
+                #         f"Item: {item.name} | is missing expected property 'default_value' in (parent node: {parent_element.get('name')}, property: {prop_name})"
+                #     )
 
     except (AttributeError, TypeError) as e:
         raise TypeError(
@@ -656,7 +657,7 @@ def port_id_hash(parent_name, blender_item=None, additional=""):
     """
     sha1 hash of the parent node name and the pointer of the port item, used to generate globally unique ids for ports in the XML representation.
     """
-    pointer = blender_item.as_pointer() if blender_item is not None else ""
+    pointer = "" if blender_item is None else blender_item.as_pointer()
     return hashlib.sha1(f"{parent_name}{pointer}{additional}".encode()).hexdigest()
 
 
@@ -702,9 +703,7 @@ def connect_wrapperIN_to_innerIN(
                 socket_index
             ]  # grab specific socket for unique pointer
 
-            inner_id = port_id_hash(
-                inner_node.name, target_socket.as_pointer, "_InnerIn-Input"
-            )
+            inner_id = port_id_hash(inner_node.name, target_socket, "_InnerIn-Input")
             ET.SubElement(
                 inner_input_node_element,
                 "Port",
