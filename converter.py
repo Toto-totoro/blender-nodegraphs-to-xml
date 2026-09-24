@@ -178,8 +178,8 @@ def convert_node_graph_to_xml(node_graph, root, graph_id) -> int:
         if link.to_node.type == "GROUP":
             to_node_name += "_WrapperIn"
 
-        from_id = port_id_hash(from_node_name, link.from_socket.as_pointer())
-        to_id = port_id_hash(to_node_name, link.to_socket.as_pointer())
+        from_id = port_id_hash(from_node_name, link.from_socket)
+        to_id = port_id_hash(to_node_name, link.to_socket)
         create_connection_element(nodegroup_element, from_id, to_id)
 
     return graph_id
@@ -488,7 +488,7 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                     name=item.name + str(property_map_update(property_map, item.name)),
                     direction="out" if item.is_output else "in",
                     type=item.type,
-                    id=port_id_hash(parent_element.get("name"), item.as_pointer()),
+                    id=port_id_hash(parent_element.get("name"), item),
                 )
 
             # extract unlinked input item into new node
@@ -526,9 +526,7 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                             + str(property_map_update(property_map, item.name)),
                             direction="in",
                             type=item.type,
-                            id=port_id_hash(
-                                parent_element.get("name"), item.as_pointer()
-                            ),
+                            id=port_id_hash(parent_element.get("name"), item),
                         )
 
                         type_to_node = {
@@ -545,7 +543,7 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                             + "_"
                             + port_id_hash(
                                 parent_element.get("name"),
-                                item.as_pointer(),
+                                item,
                             ),
                             type=type_to_node.get(
                                 type(item.default_value), "ShaderNodeValue"
@@ -554,21 +552,20 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                         ET.SubElement(
                             extracted_element,
                             "Constant",
-                            name="Value"
-                            + str(port_id_hash(extracted_element.get("name"), "Value")),
+                            name="Value0",
                             value=str(item.default_value),
                             type=item.type,
                         )
                         extracted_out_socket = ET.SubElement(
                             extracted_element,
                             "Port",
-                            name="Value"
-                            + str(port_id_hash(extracted_element.get("name"), "Value")),
+                            name="Value1",
                             direction="out",
                             type=item.type,
                             id=port_id_hash(
                                 parent_element.get("name"),
-                                f"{item.as_pointer()}valueOut",
+                                item,
+                                "valueOut",
                             ),
                         )
 
@@ -600,18 +597,13 @@ def extract_input_vector(item, parent_element, property_map):
         name=item.name + str(property_map_update(property_map, item.name)),
         direction="in",
         type=item.type,
-        id=port_id_hash(parent_element.get("name"), item.as_pointer()),
+        id=port_id_hash(parent_element.get("name"), item),
     )
 
     extracted_vector_element = ET.SubElement(
         parent_element.getparent(),
         "Node",
-        name=item.name
-        + "_"
-        + port_id_hash(
-            parent_element.get("name"),
-            item.as_pointer(),
-        ),
+        name=item.name + "_" + port_id_hash(parent_element.get("name"), item),
         type="FunctionNodeInputRotation" if is_rotation else "FunctionNodeInputVector",
     )
     vec = item.default_value.to_quaternion() if is_rotation else item.default_value
@@ -630,10 +622,7 @@ def extract_input_vector(item, parent_element, property_map):
         name="Rotation0" if is_rotation else "Vector0",
         direction="out",
         type=item.type,
-        id=port_id_hash(
-            parent_element.get("name"),
-            f"{item.as_pointer()}vectorOut",
-        ),
+        id=port_id_hash(parent_element.get("name"), item, "vectorOut"),
     )
 
     from_id = extracted_vec_out_socket.get("id")
@@ -664,11 +653,12 @@ def extract_input_vector(item, parent_element, property_map):
 #############################
 
 
-def port_id_hash(parent_name, item_pointer):
+def port_id_hash(parent_name, blender_item=None, additional=""):
     """
     sha1 hash of the parent node name and the pointer of the port item, used to generate globally unique ids for ports in the XML representation.
     """
-    return hashlib.sha1(f"{parent_name}{item_pointer}".encode()).hexdigest()
+    pointer = blender_item.as_pointer() if blender_item is not None else ""
+    return hashlib.sha1(f"{parent_name}{pointer}{additional}".encode()).hexdigest()
 
 
 def create_connection_element(parent_element, from_id, to_id):
@@ -695,9 +685,7 @@ def connect_wrapperIN_to_innerIN(
             output_socket.name == ""
         ):  # there is always an unnamed placeholder socket, skip that b*
             continue
-        outer_id = port_id_hash(
-            wrapper_node.name, f"{output_socket.as_pointer()}_WrapperIn-Output"
-        )
+        outer_id = port_id_hash(wrapper_node.name, output_socket, "_WrapperIn-Output")
         ET.SubElement(
             wrapper_node_element,
             "Port",
@@ -716,7 +704,7 @@ def connect_wrapperIN_to_innerIN(
             ]  # grab specific socket for unique pointer
 
             inner_id = port_id_hash(
-                inner_node.name, f"{target_socket.as_pointer()}_InnerIn-Input"
+                inner_node.name, target_socket.as_pointer, "_InnerIn-Input"
             )
             ET.SubElement(
                 inner_input_node_element,
@@ -745,12 +733,8 @@ def connect_innerOUT_to_wrapperOUT(
             input_socket.name == ""
         ):  # there is always an unnamed placeholder socket, skip that b*
             continue
-        outer_id = port_id_hash(
-            wrapper_node.name, f"{input_socket.as_pointer()}_WrapperOUT-Input"
-        )
-        inner_id = port_id_hash(
-            inner_node.name, f"{input_socket.as_pointer()}_InnerOUT-Output"
-        )
+        outer_id = port_id_hash(wrapper_node.name, input_socket, "_WrapperOUT-Input")
+        inner_id = port_id_hash(inner_node.name, input_socket, "_InnerOUT-Output")
         ET.SubElement(
             inner_output_node_element,
             "Port",
