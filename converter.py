@@ -100,9 +100,10 @@ def convert_node_graph_to_xml(node_graph, root, graph_id) -> int:
                     graph_id = convert_node_graph_to_xml(
                         node.node_tree, nodegroup_element, graph_id
                     )
+                    #! needs to be called after inner node group is converted
                     convert_nodegroup_node_to_xml(
                         node, nodegroup_element, current_graph_id
-                    )  #! needs to be called after inner node group is converted
+                    )
                 except Exception as e:
                     raise NodeConversionError(
                         f"Error converting node group {node.name}"
@@ -143,14 +144,12 @@ def convert_node_graph_to_xml(node_graph, root, graph_id) -> int:
             "bl_height_default",
             "bl_height_min",
             "bl_height_max",
-            # these are currently filtered out by isinstance checking anyway lol
             "rna_type",
             "location",
             "location_absolute",
             "dimensions",
-            "parent",  # TODO: might be useful, don't know, investigate
+            "parent",
             "color",
-            # TODO: verify if these are needed
             "texture_mapping",
             "color_mapping",
             "node_tree",  # handled elsewhere
@@ -190,7 +189,6 @@ def convert_node_graph_to_xml(node_graph, root, graph_id) -> int:
 ########################################################
 
 
-#! this might fail to work correctly if the inner node group has more than one input or output node (which shouldn't be the case)
 def convert_nodegroup_node_to_xml(node, parent_element, graph_id):
     """
     This function should always be called after the inner node group has been converted to xml \n
@@ -207,7 +205,7 @@ def convert_nodegroup_node_to_xml(node, parent_element, graph_id):
 
     # retrieve the inner input and output nodes of the node group in the xml representation
     # the nodes are generated into the xml seperately and by using the id and (normally) unique node names we can find them again
-    # * sadly currently simplest way for this since global variables are a little tricky in blender
+    # * currently simplest way for this, alternative would be: register new global map variable in blender -> safe mapped references to nodes -> retrieve here
     inner_input_node_elements = parent_element.xpath(
         f"Graph[@id='{graph_id}']/Node[@type='NodeGroupInput']"
     )
@@ -358,7 +356,7 @@ def convert_node_properties_to_xml(node, node_element, filter_unnecessary=None):
         _value = node.outputs["Value"].default_value
         if _value is None:
             raise AttributeError(
-                f"Node [name: {node.name}, type: {node.type}] is missing expected attribute outputs['Value'].default_value"
+                f"Node (name: {node.name}, type: {node.type}) is missing expected attribute outputs['Value'].default_value"
             )
         ET.SubElement(
             node_element,
@@ -376,8 +374,8 @@ def convert_node_properties_to_xml(node, node_element, filter_unnecessary=None):
         prop = getattr(node, prop_name)
 
         # * handle new property types here
-        # currently unsupported: TexMapping, ColorMapping, mathutils.Euler
-        # probably only need to implement new ones if you use custom properties
+        # currently unsupported: TexMapping, ColorMapping
+        # probably only need to implement new ones if you use custom properties or Shader Nodes
 
         # collection properties (inputs, outputs)
         if isinstance(prop, bpy.types.bpy_prop_collection):
@@ -400,7 +398,7 @@ def convert_node_properties_to_xml(node, node_element, filter_unnecessary=None):
             )
 
         # mapping properties (TexMapping, ColorMapping)
-        # * Currently deemed not needed
+        # * Currently deemed not needed, is used for Shader Nodes
         # elif isinstance(prop, bpy.types.TexMapping) or isinstance(prop, bpy.types.ColorMapping):
         #    convert_bpy_mapping_to_xml(prop, prop_name, node_element)
 
@@ -416,8 +414,9 @@ def convert_node_properties_to_xml(node, node_element, filter_unnecessary=None):
             continue  # Skip node_tree properties, handled recursively in `convert_node_graph_to_xml()`
 
         else:
+            # this is not necessarily an error, rather an info for future developement, therefore no error is raised to not stop xml generation
             print(
-                f"Unsupported property type for {prop_name} in node {node.name}: {type(prop)}"
+                f"Warning: Unsupported property type for {prop_name} in node {node.name}: {type(prop)}"
             )
 
     return property_map
@@ -511,12 +510,6 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                     ):
                         extract_input_vector(item, parent_element, property_map)
 
-                    # doesn't seem needed rn
-                    # elif isinstance(item.default_value, mathutils.Euler):
-                    #     convert_mathutils_euler_to_xml(
-                    #         item.default_value, item.name, parent_element, property_map
-                    #     )
-
                     # bool, int, str, float
                     elif isinstance(item.default_value, (int, float, str, bool)):
                         item_element = ET.SubElement(
@@ -576,11 +569,17 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                         )
 
                     else:
+                        # this is not necessarily an error, rather an info for future developement, therefore no error is raised to not stop xml generation
                         print(
-                            f"value: {item.default_value}, type: {type(item.default_value)} | is an unsupported type in bpy_prop_collection: (parent node: {parent_element.get('name')}, porperty: {prop_name})"
+                            f"Warning: Value: {item.default_value}, type: {type(item.default_value)} | is an unsupported type in bpy_prop_collection: (parent node: {parent_element.get('name')}, porperty: {prop_name}, item: {item.name})"
                         )
 
-    except TypeError as e:
+                else:
+                    raise AttributeError(
+                        f"Item: {item.name} | is missing expected property 'default_value' in (parent node: {parent_element.get('name')}, property: {prop_name})"
+                    )
+
+    except (AttributeError, TypeError) as e:
         raise TypeError(
             f"{prop_name}: {type(prop)} | is not a bpy.types.bpy_prop_collection or some of its items are broken."
         ) from e
