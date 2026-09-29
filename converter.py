@@ -322,13 +322,13 @@ def convert_nodegroup_node_to_xml(node, parent_element, graph_id):
         "outputs",  # special
     }
     convert_node_properties_to_xml(
-        node, wrapperIN_node_element, graph_id, filter_for_input_node
+        node, wrapperIN_node_element, graph_id - 1, filter_for_input_node
     )
 
     # generate wrapper output
     property_map = {}
     convert_bpy_collection_to_xml(
-        node.outputs, "outputs", wrapperOUT_node_element, property_map, graph_id
+        node.outputs, "outputs", wrapperOUT_node_element, property_map, graph_id - 1
     )
 
     # route wrapper nodes to their inner counterparts
@@ -689,7 +689,7 @@ def port_id_hash(graph_id, parent_name, blender_item=None, additional=""):
     """
     pointer = "" if blender_item is None else blender_item.as_pointer()
     return hashlib.sha1(
-        f"{graph_id}{parent_name}{pointer}{additional}".encode()
+        f"{graph_id!s}{parent_name}{pointer}{additional}".encode()
     ).hexdigest()
 
 
