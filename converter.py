@@ -155,7 +155,9 @@ def convert_node_graph_to_xml(node_graph, root, graph_id) -> int:
             "color_mapping",
             "node_tree",  # handled elsewhere
         }
-        convert_node_properties_to_xml(node, node_element, graph_id, filter_unnecessary)
+        convert_node_properties_to_xml(
+            node, node_element, current_graph_id, filter_unnecessary
+        )
 
     # Store node links
     # Format: <Connection from='hash_id' to='hash_id' />
