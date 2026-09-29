@@ -103,7 +103,7 @@ def convert_node_graph_to_xml(node_graph, root, graph_id) -> int:
                     )
                     #! needs to be called after inner node group is converted
                     convert_nodegroup_node_to_xml(
-                        node, nodegroup_element, nodegroup_graph_id
+                        node, nodegroup_element, nodegroup_graph_id, current_graph_id
                     )
                 except Exception as e:
                     raise NodeConversionError(
@@ -192,7 +192,7 @@ def convert_node_graph_to_xml(node_graph, root, graph_id) -> int:
 ########################################################
 
 
-def convert_nodegroup_node_to_xml(node, parent_element, graph_id):
+def convert_nodegroup_node_to_xml(node, parent_element, graph_id, parent_graph_id):
     """
     This function should always be called after the inner node group has been converted to xml \n
     Converts the nodegroup node (for recursive node_groups) by splitting it and wrapping the inner node graph.
@@ -322,13 +322,13 @@ def convert_nodegroup_node_to_xml(node, parent_element, graph_id):
         "outputs",  # special
     }
     convert_node_properties_to_xml(
-        node, wrapperIN_node_element, graph_id - 1, filter_for_input_node
+        node, wrapperIN_node_element, parent_graph_id, filter_for_input_node
     )
 
     # generate wrapper output
     property_map = {}
     convert_bpy_collection_to_xml(
-        node.outputs, "outputs", wrapperOUT_node_element, property_map, graph_id - 1
+        node.outputs, "outputs", wrapperOUT_node_element, property_map, parent_graph_id
     )
 
     # route wrapper nodes to their inner counterparts
