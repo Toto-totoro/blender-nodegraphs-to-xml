@@ -77,6 +77,7 @@ def convert_node_graph_to_xml(node_graph, root, graph_id) -> int:
     Return:
       graph_id, which increments for each recursive node group conversion to ensure unique graph ids in the XML representation. \n
     """
+    current_graph_id = graph_id
 
     is_material = type(node_graph) is bpy.types.Material
     nodegroup_element = ET.SubElement(
@@ -96,13 +97,13 @@ def convert_node_graph_to_xml(node_graph, root, graph_id) -> int:
             if node.node_tree is not None:
                 try:
                     graph_id += 1
-                    current_graph_id = graph_id
+                    nodegroup_graph_id = graph_id
                     graph_id = convert_node_graph_to_xml(
                         node.node_tree, nodegroup_element, graph_id
                     )
                     #! needs to be called after inner node group is converted
                     convert_nodegroup_node_to_xml(
-                        node, nodegroup_element, current_graph_id
+                        node, nodegroup_element, nodegroup_graph_id
                     )
                 except Exception as e:
                     raise NodeConversionError(
@@ -177,8 +178,8 @@ def convert_node_graph_to_xml(node_graph, root, graph_id) -> int:
         if link.to_node.type == "GROUP":
             to_node_name += "_WrapperIn"
 
-        from_id = port_id_hash(graph_id, from_node_name, link.from_socket)
-        to_id = port_id_hash(graph_id, to_node_name, link.to_socket)
+        from_id = port_id_hash(current_graph_id, from_node_name, link.from_socket)
+        to_id = port_id_hash(current_graph_id, to_node_name, link.to_socket)
         create_connection_element(nodegroup_element, from_id, to_id)
 
     return graph_id
