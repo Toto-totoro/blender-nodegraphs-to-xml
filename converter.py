@@ -522,11 +522,26 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                             id=port_id_hash(parent_element.get("name"), item),
                         )
 
+                        _type = type(item.default_value)
+
                         type_to_node = {
                             int: "FunctionNodeInputInt",
                             str: "FunctionNodeInputString",
                             float: "ShaderNodeValue",
                             bool: "FunctionNodeInputBool",
+                        }
+
+                        type_to_port_name = {
+                            int: "Integer0",
+                            str: "String0",
+                            float: "Value1",
+                            bool: "Boolean0",
+                        }
+                        type_to_constant_name = {
+                            int: "integer0",
+                            str: "string0",
+                            float: "Value0",
+                            bool: "boolean0",
                         }
 
                         extracted_element = ET.SubElement(
@@ -538,21 +553,19 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                                 parent_element.get("name"),
                                 item,
                             ),
-                            type=type_to_node.get(
-                                type(item.default_value), "ShaderNodeValue"
-                            ),
+                            type=type_to_node.get(_type),
                         )
                         ET.SubElement(
                             extracted_element,
                             "Constant",
-                            name="Value0",
+                            name=type_to_constant_name.get(_type),
                             value=str(item.default_value),
                             type=item.type,
                         )
                         extracted_out_socket = ET.SubElement(
                             extracted_element,
                             "Port",
-                            name="Value1",
+                            name=type_to_port_name.get(_type),
                             direction="out",
                             type=item.type,
                             id=port_id_hash(
@@ -573,12 +586,6 @@ def convert_bpy_collection_to_xml(prop, prop_name, parent_element, property_map)
                         print(
                             f"Warning: Value: {item.default_value}, type: {type(item.default_value)} | is an unsupported type in bpy_prop_collection: (parent node: {parent_element.get('name')}, porperty: {prop_name}, item: {item.name})"
                         )
-
-                # this always throws even when unintended, need filter for allowed instances
-                # else:
-                #     raise AttributeError(
-                #         f"Item: {item.name} | is missing expected property 'default_value' in (parent node: {parent_element.get('name')}, property: {prop_name})"
-                #     )
 
     except (AttributeError, TypeError) as e:
         raise TypeError(
