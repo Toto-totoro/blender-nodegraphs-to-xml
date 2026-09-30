@@ -51,7 +51,7 @@ def convert_node_graphs_to_xml(node_graphs: list) -> str:
                 type=e.__class__.__name__,
                 graph=node_graph.name,
             )
-            error_element.text = str(e)
+            error_element.text = str(f"{e} | {traceback.format_exc()}")
         except Exception as e:
             print(
                 f"Unexpected system error converting node graph '{node_graph.name}': {e}"
@@ -63,7 +63,7 @@ def convert_node_graphs_to_xml(node_graphs: list) -> str:
                 type=e.__class__.__name__,
                 graph=node_graph.name,
             )
-            error_element.text = str(e)
+            error_element.text = str(f"{e} | {traceback.format_exc()}")
 
     if len(diagnostics_element) == 0:
         root.remove(diagnostics_element)
